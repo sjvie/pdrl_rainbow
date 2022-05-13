@@ -1,6 +1,8 @@
 import random
 from collections import deque
 
+import numpy as np
+
 
 class PrioritizedBuffer:
     """
@@ -73,18 +75,67 @@ class PrioritizedBuffer:
             self.sumtree.load(file_name + "_sum.npy")
         pass
 
-class PrioritzedBuffer(ReplayBuffer):
-    # TODO: Nochmal schauen, welche Methoden wir hier noch brauchen
-    def __init__(self):
-        super(ReplayBuffer, self).__init__()
-        pass
 
-    def get_batch(self, batch_size=32):
-        """ sample batch from memory using a KL loss-based distribution """
-        # TODO
-        pass
+class SumMinMaxTree:
 
-    # TODO
+    def __init__(self, capacity):
+        self.capacity = capacity
+        self.array_size = get_next_power_of_2(self.capacity)
+        # todo: possible memory optimization (if needed) -> maybe float16
+        self.sum_array = np.zeros(self.array_size * 2 - 1, dtype=np.float32)
+        self.min_array = np.empty(self.array_size * 2 - 1, dtype=np.float32)
+        self.min_array.fill(np.inf)
+        self.max_array = np.zeros(self.array_size * 2 - 1, dtype=np.float32)
+
+    def sum(self):
+        return self.sum_array[0]
+
+    def min(self):
+        return self.min_array[0]
+
+    def max(self):
+        return self.max_array[0]
+
+    def add(self, data_index, priority):
+        self.set_priority(data_index, priority)
+
+    def set_priority(self, data_index, priority):
+        current_index = data_index + self.array_size - 1
+        priority_diff = priority - self.sum_array[current_index]
+        self.sum_array[current_index] = priority
+        current_index = (current_index - 1) // 2
+
+        while current_index >= 0:
+            self.sum_array[current_index] += priority_diff
+            child_index = current_index * 2 + 1
+            self.min_array[current_index] = min(self.min_array[child_index], self.min_array[child_index + 1])
+            self.max_array[current_index] = max(self.max_array[child_index], self.max_array[child_index + 1])
+
+            current_index = (current_index - 1) // 2
+
+    def sample(self, sample_priority):
+        # todo: <= or <?
+        assert 0 <= sample_priority < self.sum()
+
+        current_index = 0
+        left_index = current_index * 2 + 1
+        while current_index < self.array_size:
+            left_priority = self.sum_array[left_index]
+            if left_priority > sample_priority:
+                current_index = left_index
+            else:
+                sample_priority -= left_priority
+                current_index = left_index + 1
+
+        data_index = current_index - self.array_size - 1
+        return data_index, self.sum_array[current_index]
+
+    def clear(self):
+        self.sum_array = np.zeros(self.array_size * 2 - 1, dtype=np.float32)
+        self.min_array = np.empty(self.array_size * 2 - 1, dtype=np.float32)
+        self.min_array.fill(np.inf)
+        self.max_array = np.zeros(self.array_size * 2 - 1, dtype=np.float32)
+
 
 def get_next_power_of_2(k):
     n = 2

@@ -40,7 +40,8 @@ class Model(nn.Module):
         Q = value + advantage - torch.mean(advantage, dim=1, keepdim=True)
         return Q
 
-    def get_action(self, state):
+    def select_action(self, state):
+        self.eval()
         with torch.no_grad():
             Q = self.forward(state)
             action_index = torch.argmax(Q, dim=1)

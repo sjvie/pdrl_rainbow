@@ -67,12 +67,14 @@ class PrioritizedBuffer:
     def save(self, file_name):
         np.save(file_name + ".npy", self.memory)
         self.sumtree.save(file_name + ".npy")
+        # todo
         pass
 
     def load(self, file_name):
         with open(file_name + ".npy", 'rb') as f:
             self.memory = np.load(f)
             self.sumtree.load(file_name + "_sum.npy")
+        # todo
         pass
 
 

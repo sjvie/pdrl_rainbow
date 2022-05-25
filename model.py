@@ -7,7 +7,7 @@ import torch
 
 class Model(nn.Module):
 
-    def __init__(self, input_dim, action_space):
+    def __init__(self, input_dim, action_space, num_atoms):
         super().__init__()
 
         self.input_dim = input_dim
@@ -21,14 +21,14 @@ class Model(nn.Module):
 
         self.value = nn.Sequential(
             NoisyLinear(input_dim=64, output_dim=512, sigma_zero=sigma_zero), nn.ReLU(),
-            NoisyLinear(input_dim=512, output_dim=1, sigma_zero=sigma_zero),
+            NoisyLinear(input_dim=512, output_dim=num_atoms, sigma_zero=sigma_zero),
             # nn.Linear(in_channels=64, out_channels=512), nn.ReLU(),
             # nn.Linear(512, 1)
         )
 
         self.advantage = nn.Sequential(
             NoisyLinear(input_dim=64, output_dim=512, sigma_zero=sigma_zero), nn.ReLU(),
-            NoisyLinear(input_dim=512, output_dim=action_space, sigma_zero=sigma_zero),
+            NoisyLinear(input_dim=512, output_dim=action_space*num_atoms, sigma_zero=sigma_zero),
             # nn.Linear(in_channels=64, out_channels=512), nn.ReLU(),
             # nn.Linear(512, action_space)
         )
@@ -37,6 +37,7 @@ class Model(nn.Module):
         c = self.conv(input)
         value = self.value(c)
         advantage = self.advantage(c)
+        # todo: modify so this works for distributions (action_space * num_atoms)
         Q = value + advantage - torch.mean(advantage, dim=1, keepdim=True)
         return Q
 
@@ -44,10 +45,9 @@ class Model(nn.Module):
         self.eval()
         with torch.no_grad():
             Q = self.forward(state)
+            # todo: modify so this works for distributions (action_space * num_atoms)
             action_index = torch.argmax(Q, dim=1)
         return action_index.item()
-
-    # TODO
 
 
 class NoisyLinear(nn.Module):

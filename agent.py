@@ -7,12 +7,13 @@ from replay_buffer import PrioritizedBuffer
 
 class Agent:
 
-    def __init__(self, input_dim, action_space):
+    def __init__(self, input_dim, action_space, num_atoms, batch_size):
         self.input_dim = input_dim
         self.action_space = action_space
+        self.batch_size = batch_size
 
-        self.online_model = Model(input_dim, action_space)
-        self.target_model = Model(input_dim, action_space)
+        self.online_model = Model(input_dim, action_space, num_atoms)
+        self.target_model = Model(input_dim, action_space, num_atoms)
         self.optimizer = torch.optim.Adam(self.online_model.parameters(),
                                           lr=Config.adam_learning_rate,
                                           eps=Config.adam_e)
@@ -29,7 +30,22 @@ class Agent:
 
     # todo: rename method?
     def step(self, state, action, reward, next_state, done):
-        pass
+        self.replay_buffer.add(state, action, reward, next_state, done)
+
+    def train(self):
+        batch, weights, idxs = self.replay_buffer.get_batch(self.batch_size)
+        states, actions, rewards, next_states, dones = batch
+
+        # TODO: calculate loss (or implement in method below)
+        # get approximating distribution of the model (target and online model)
+        # calculate target distribution (n step returns)
+        # project target distribution onto same support as other distribution
+        # get Kullbeck-Leibler divergence of target distribution and the approximating distribution
+
+        loss = None
+        self.optimizer.zero_grad()
+        loss.backward()
+        self.optimizer.step()
 
     def calc_loss(self, state, action, reward, next_state, done):
         pass

@@ -3,7 +3,9 @@ import torch
 from config import Config
 from model import Model
 from replay_buffer import PrioritizedBuffer
+import copy
 
+device = torch.device(Config.device if torch.cuda.is_available() else "cpu")
 
 class Agent:
 
@@ -13,7 +15,7 @@ class Agent:
         self.batch_size = batch_size
 
         self.online_model = Model(input_dim, action_space, num_atoms)
-        self.target_model = Model(input_dim, action_space, num_atoms)
+        self.target_model = copy.deepcopy(self.online_model)
         self.optimizer = torch.optim.Adam(self.online_model.parameters(),
                                           lr=Config.adam_learning_rate,
                                           eps=Config.adam_e)
@@ -31,6 +33,7 @@ class Agent:
     # todo: rename method?
     def step(self, state, action, reward, next_state, done):
         self.replay_buffer.add(state, action, reward, next_state, done)
+
 
     def train(self):
         batch, weights, idxs = self.replay_buffer.get_batch(self.batch_size)

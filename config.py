@@ -59,3 +59,6 @@ class Config:
 
     # paper: title :P
     name = "RAINBOW"
+
+    #GPU Device
+    device = "cuda:0"

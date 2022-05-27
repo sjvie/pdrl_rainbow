@@ -23,6 +23,7 @@ class Config:
     # paper: Adam epsilon: 1.5 x 10^-4
     adam_e = 1.5e-4
 
+    # todo
     # paper: ?
     num_episodes = 100
 

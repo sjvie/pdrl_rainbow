@@ -34,21 +34,34 @@ class Model(nn.Module):
             # nn.Linear(512, action_space)
         )
 
-    def forward(self, input):
-        c = self.conv(input)
-        value = self.value(c)
-        advantage = self.advantage(c)
-        # todo: modify so this works for distributions (action_space * num_atoms)
-        Q = value + advantage - torch.mean(advantage, dim=1, keepdim=True)
-        return Q
 
-    def select_action(self, state):
-        self.eval()
-        with torch.no_grad():
-            Q = self.forward(state)
-            # todo: modify so this works for distributions (action_space * num_atoms)
-            action_index = torch.argmax(Q, dim=1)
-        return action_index.item()
+    def forward(self, input, log=False):
+        """
+
+        :param input (Tensor): input of the model. Tensor of dim [input_dim]
+        :param log (boolean): whether to calculate the softmax with or without log
+        :return (Tensor): output of the model. Tensor of dim [action_space, num_atoms]
+        """
+        # convolutional layers
+        c = self.conv(input)
+
+        # value stream (linear layers)
+        value = self.value(c)
+
+        # value stream (linear layers)
+        advantage = self.advantage(c)
+
+        # convert one dimensional tensor to two dimensions
+        advantage = advantage.view(self.action_space, self.num_atoms)
+
+        # combine value and advantage stream
+        Q_dist = value + advantage - advantage.mean(dim=1, keepdim=True)
+
+        # apply softmax (with or without log)
+        if log:
+            return torch.log_softmax(Q_dist, dim=1)
+        else:
+            return torch.softmax(Q_dist, dim=1)
 
 
 class NoisyLinear(nn.Module):

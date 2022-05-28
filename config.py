@@ -37,7 +37,7 @@ class Config:
     start_learning_after = 80000
 
     # paper: Max frames per episode: 108K
-    max_frames_per_episode: 108000
+    max_frames_per_episode = 108000
 
     # todo: is this the gamma exponent used in the rainbow paper?
     # paper: Prioritization exponent gamma: 0.5

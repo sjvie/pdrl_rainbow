@@ -1,79 +1,113 @@
 import random
-from collections import deque
-
 import numpy as np
 
 
 class PrioritizedBuffer:
-    """
-    :param obs: (Must be cast to numpy int!) observation which is "observed" by the agent, most likely 2D screen, In case of Atari 84x84 (x4 Frame Stack)
-    :param next_obs: (Must be cast to numpy int!) the observation which resulted from action take in observation
-    :param action:(discrete type, numpy int8) action taken in observation
-    :param done: (type: numpy bool) parameter which indicates if the episode ended (0) or is ongoing (1)
-    :param weight: (numpy float) importance weights for every element in batch, which indicates the importance of the element.
-        gradient is also multiplied with importance weight.
-    :param alpha: weights the importance of every experience
-    :param beta: adjusts weights
-    """
-
     def __init__(self, size, observation_space, alpha, beta):
+        """
+        :param size (int): size of the replay buffer
+        :param observation_space (int): size of the observations
+        :param alpha (float): hyperparameter. Exponent of the priorities
+        :param beta (float): hyperparameter. Exponent used in calculating the weights
+        """
+
         self.alpha = alpha
         self.beta = beta
         self.max_size = size
         self.current_size = 0
 
         dt = np.dtype([("obs", np.uint8, (observation_space,)), ("action", np.uint8), ("reward", np.float32),
-                       ("next_obs", np.uint8, (observation_space,)), ("done", np.bool)])
+                       ("next_obs", np.uint8, (observation_space,)), ("done", bool)])
 
         self.memory = np.zeros(size, dt)
 
-        self.sumtree = SumMinMaxTree(size)
+        self.tree = SumMinMaxTree(size)
         self.max_prio = 1.0
         self.idx = 0
 
     def add(self, state, action, reward, next_state, done):
-        """ Add new experience to the buffer"""
+        """ Add new experience to the buffer
+        :param state (np array): state before the action. array with dim [observation_space]
+        :param action (int): action that the agent chose
+        :param reward (float): reward that the agent got from the environment
+        :param next_state (np array): state after the action. array with dim [observation_space]
+        :param done (bool): whether the experience ends the episode
+        """
+
+        # save experience to memory
         self.memory[self.idx] = (state, action, reward, next_state, done)
 
-        max_priority = self.sumtree.max()
-        self.sumtree.add(self.idx, max_priority ** self.alpha)
+        # set the priority of the new experience
+        if self.idx == 0:
+            # when the buffer is empty just use value 1.0
+            max_priority = 1.0
+        else:
+            # take the max priority of all experiences
+            max_priority = self.tree.max()
+
+        # add the experience to the tree
+        self.tree.add(self.idx, max_priority ** self.alpha)
+
+        # set new size and index
         if self.current_size < self.max_size:
             self.current_size += 1
         self.idx = (self.idx + 1) % self.max_size
 
     def get_batch(self, batch_size=32):
-        batch = []
-        weights = []
-        idxs = []
-        treesum = self.sumtree.sum()
+        """
+        :param batch_size (int): size of the batch to be sampled
+        :return ([experience], [float], [int]): list of experiences consisting of (state, action, reward, next_state, done)
+                                                list of weights for training
+                                                list of indices of the experiences in the buffer
+        """
+
+        batch = [0] * batch_size
+        weights = [0] * batch_size
+        indices = [0] * batch_size
+
+        # get total sum of priorities
+        treesum = self.tree.sum()
+
+        # the range from which each experience is sampled
         batch_range = treesum / batch_size
 
-        max_weight = ((1 / self.current_size) * (1 / self.sumtree.min())) ** self.beta
+        # get the max weight using the minimum priority
+        max_weight = ((1 / self.current_size) * (1 / self.tree.min())) ** self.beta
 
         for i in range(batch_size):
+            # get the random priority to sample from the tree
             sample_priority = random.random() * batch_range + i * batch_range
-            idx, priority = self.sumtree.sample(sample_priority)
+
+            # sample from the tree
+            idx, priority = self.tree.sample(sample_priority)
+
+            # calculate the weight
             # w_j = (N* P(j))⁻beta  /max weight
             weight = ((self.current_size * priority) ** -self.beta) / max_weight
-            weights.append(weight)
-            idxs.append(idx)
-            batch.append(self.memory[idx])
 
-        return batch, weights, idxs
+            weights[i] = weight
+            indices[i] = idx
+            batch[i] = self.memory[idx]
+
+        return batch, weights, indices
 
     def set_prio(self, idx, priority):
-        self.sumtree.set_priority(idx, priority ** self.alpha)
+        """
+        :param idx (int): index of the experience
+        :param priority (float): new priority of the experience. Alpha hyperparameter is applied in this method
+        """
+        self.tree.set_priority(idx, priority ** self.alpha)
 
     def save(self, file_name):
         np.save(file_name + ".npy", self.memory)
-        self.sumtree.save(file_name + ".npy")
+        self.tree.save(file_name + ".npy")
         # todo
         pass
 
     def load(self, file_name):
         with open(file_name + ".npy", 'rb') as f:
             self.memory = np.load(f)
-            self.sumtree.load(file_name + "_sum.npy")
+            self.tree.load(file_name + "_sum.npy")
         # todo
         pass
 
@@ -105,6 +139,8 @@ class SumMinMaxTree:
         current_index = data_index + self.array_size - 1
         priority_diff = priority - self.sum_array[current_index]
         self.sum_array[current_index] = priority
+        self.min_array[current_index] = priority
+        self.max_array[current_index] = priority
         current_index = (current_index - 1) // 2
 
         while current_index >= 0:
@@ -142,5 +178,5 @@ class SumMinMaxTree:
 def get_next_power_of_2(k):
     n = 2
     while n < k:
-        n **= 2
+        n *= 2
     return n

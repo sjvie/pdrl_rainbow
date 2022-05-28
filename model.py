@@ -1,22 +1,33 @@
 import math
-
 import cupy as np
 import torch.nn as nn
 import torch
 
 
-
 class Model(nn.Module):
 
-    def __init__(self, input_dim, action_space, num_atoms):
+    def __init__(self, input_dim, action_space, num_atoms, conv=True):
+        """
+        :param input_dim (int): the length of the input vector
+        :param action_space (int): the amount of actions
+        :param num_atoms (int): the amount of atoms for the probability distribution of each action
+        """
         super().__init__()
 
         self.input_dim = input_dim
-        self.conv = nn.Sequential(
-            nn.Conv2d(in_channels=input_dim, out_channels=32, kernel_size=8, stride=4), nn.ReLU(),
-            nn.Conv2d(in_channels=32, out_channels=64, kernel_size=4, stride=2), nn.ReLU(),
-            nn.Conv2d(in_channels=64, out_channels=64, kernel_size=3, stride=1), nn.ReLU()
-        )
+        self.action_space = action_space
+        self.num_atoms = num_atoms
+
+        if conv:
+            self.conv = nn.Sequential(
+                nn.Conv2d(in_channels=input_dim, out_channels=32, kernel_size=8, stride=4), nn.ReLU(),
+                nn.Conv2d(in_channels=32, out_channels=64, kernel_size=4, stride=2), nn.ReLU(),
+                nn.Conv2d(in_channels=64, out_channels=64, kernel_size=3, stride=1), nn.ReLU()
+            )
+        else:
+            self.conv = nn.Sequential(
+                nn.Linear(in_features=input_dim, out_features=64), nn.ReLU()
+            )
 
         sigma_zero = 0.5
 
@@ -29,21 +40,19 @@ class Model(nn.Module):
 
         self.advantage = nn.Sequential(
             NoisyLinear(input_dim=64, output_dim=512, sigma_zero=sigma_zero), nn.ReLU(),
-            NoisyLinear(input_dim=512, output_dim=action_space*num_atoms, sigma_zero=sigma_zero),
+            NoisyLinear(input_dim=512, output_dim=action_space * num_atoms, sigma_zero=sigma_zero),
             # nn.Linear(in_channels=64, out_channels=512), nn.ReLU(),
             # nn.Linear(512, action_space)
         )
 
-
-    def forward(self, input, log=False):
+    def forward(self, x, log=False):
         """
-
-        :param input (Tensor): input of the model. Tensor of dim [input_dim]
+        :param x (Tensor): input of the model. Tensor of dim [input_dim]
         :param log (boolean): whether to calculate the softmax with or without log
         :return (Tensor): output of the model. Tensor of dim [action_space, num_atoms]
         """
         # convolutional layers
-        c = self.conv(input)
+        c = self.conv(x)
 
         # value stream (linear layers)
         value = self.value(c)
@@ -73,44 +82,65 @@ class NoisyLinear(nn.Module):
 
         self.v_eps_function = np.vectorize(self.eps_function)
 
-        self.lin_weights = nn.Parameter(torch.Tensor(input_dim, output_dim))
-        self.noisy_weights = nn.Parameter(torch.Tensor(input_dim, output_dim))
+        self.lin_weights = nn.Parameter(torch.Tensor(output_dim, input_dim))
+        self.noisy_weights = nn.Parameter(torch.Tensor(output_dim, input_dim))
 
         self.lin_bias = nn.Parameter(torch.Tensor(output_dim))
         self.noisy_bias = nn.Parameter(torch.Tensor(output_dim))
 
-        lin_init_dist_bounds = math.sqrt(3 / input_dim)
+        # initialize the weights and bias according to section 3.2 in the noisy net paper
+        # init linear weights and bias from an independent uniform distribution U[-1/sqrt(p), 1/sqrt(p)]
+        lin_init_dist_bounds = math.sqrt(1 / input_dim)
         nn.init.uniform_(self.lin_weights, -lin_init_dist_bounds, lin_init_dist_bounds)
         nn.init.uniform_(self.lin_bias, -lin_init_dist_bounds, lin_init_dist_bounds)
 
+        # init noisy weights and bias to a constant sigma_zero/sqrt(p)
         noisy_init_constant = self.sigma_zero / math.sqrt(input_dim)
         nn.init.constant_(self.noisy_weights, noisy_init_constant)
         nn.init.constant_(self.noisy_bias, noisy_init_constant)
 
     def forward(self, x):
-        lin = torch.add(torch.mm(self.lin_weights, x), self.lin_bias)
+        """
+        :param x (Tensor): input of the layer. Tensor of dim [input_dim]
+        :return (Tensor): output of the layer. Tensor of dim [output_dim]
+        """
 
-        e_weights, e_bias = self.get_eps_weight_bias(x)
-        noisy_bias_e = torch.mul(self.noisy_bias, e_bias)
-        noisy_weights_e = torch.mul(self.noisy_weights, e_weights)
-        noisy = torch.add(torch.mm(noisy_weights_e, x), noisy_bias_e)
+        # calculate the linear part of the layer using the linear weights and bias
+        lin = torch.matmul(self.lin_weights, x) + self.lin_bias
 
-        return torch.add(lin, noisy)
+        # get the random noise values
+        e_weights, e_bias = self.get_eps_weight_bias()
+
+        # calculate the noisy part of the layer
+        noisy_bias_e = self.noisy_bias * e_bias
+        noisy_weights_e = self.noisy_weights * e_weights
+        noisy = torch.matmul(noisy_weights_e, x) + noisy_bias_e
+
+        # combine linear and noisy part
+        return lin + noisy
 
     # f(x) = sgn(x)* Sqrt(|x|)  from noisy net paper (page 5 under eq. 11)
     def eps_function(self, x):
-        return np.sign(x) * np.sqrt(np.abs(x))
+        return x.sign() * x.abs().sqrt()
 
-    # epsilon_j könnte ev auch unterschiedlich sein, unklar aus paper (noisy net  eq 10 & 11)
-    def get_eps_weight_bias(self, x):
-        lfunc = lambda e: self.eps_function(e)
-        e_i_np = np.random.randn(self.input_dim)
-        e_i_np = lfunc(e_i_np)
+    def get_eps_weight_bias(self):
+        """
+        gets the random epsilon values (with applied f(x)) using the factorised Gaussian noise approach
 
-        e_j_np = np.random.randn(self.output_dim)  # q dim
-        e_j_np = lfunc(self.eps_function(e_j_np))
-        e_mat_np = e_i_np.matmul(e_j_np)
+        :return (Tensor, Tensor): the random epsilon for the weights and the bias. Tensors of dim
+                                  [output_dim, input_dim] and [output_dim]
+        """
 
-        e_mat = torch.as_tensor(e_mat_np, device='cuda')
-        e_bias = torch.as_tensor(e_j_np, device='cuda')
-        return e_mat, e_bias
+        # get first random vector and apply function
+        e_i = torch.randn(self.input_dim)
+        e_i = self.eps_function(e_i)
+
+        # get second random vector and apply function
+        e_j = torch.randn(self.output_dim)
+        e_j = self.eps_function(e_j)
+
+        # combine vectors to get the epsilon matrix
+        e_mat = torch.outer(e_j, e_i)
+
+        # return the matrix and the second vector
+        return e_mat, e_j

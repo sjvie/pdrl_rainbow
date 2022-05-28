@@ -1,4 +1,5 @@
 import numpy as np
+import torch
 
 from agent import Agent
 from config import Config
@@ -10,12 +11,24 @@ def main():
 
     env = gym.make("CartPole-v1")
     # TODO: is this needed? implement differently? what about action repetitions?
-    env = gym.wrappers.FrameStack(env, Config.frame_stack)
-    agent = Agent(env.observation_space, env.action_space, Config.distributional_atoms, Config.batch_size)
+    # env = gym.wrappers.FrameStack(env, Config.frame_stack)
+
+    input_dim = env.observation_space.shape[0]
+    #action_space = env.action_space.n
+    action_space = 2
+
+    agent = Agent(input_dim,
+                  action_space,
+                  Config.distributional_atoms,
+                  Config.distributional_v_min,
+                  Config.distributional_v_max,
+                  Config.discount_factor,
+                  Config.batch_size,
+                  conv=False)
 
     total_frames = 0
 
-    for episode in range(1, Config.num_episodes+1):
+    for episode in range(1, Config.num_episodes + 1):
         state = env.reset()
         game_over = False
         episode_frames = 0
@@ -26,7 +39,7 @@ def main():
 
             action = agent.select_action(state)
             next_state, reward, done, _ = env.step(action)
-            # todo: reward clipping
+            reward = np.clip(reward, -1, 1)
             # todo: action repetitions?
             agent.step(state, action, reward, next_state, done)
 
@@ -37,7 +50,9 @@ def main():
 
                 agent.train()
 
+            state = next_state
             game_over = done
+
 
 
 if __name__ == "__main__":

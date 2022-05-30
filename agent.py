@@ -18,7 +18,8 @@ class Agent:
         self.v_min = v_min
         self.v_max = v_max
         self.z_delta = (v_max - v_min) / (num_atoms - 1)
-        self.z_support = torch.arange(self.v_min, self.v_max + self.z_delta / 2, self.z_delta)
+        self.z_support = torch.arange(self.v_min, self.v_max + self.z_delta / 2, self.z_delta).to(device)
+        self.index_offset = (torch.arange(0, self.batch_size, 1/self.num_atoms).long() * 3).to(device)
 
         self.discount_factor = discount_factor
 
@@ -52,31 +53,65 @@ class Agent:
         next_states = torch.Tensor(next_states).to(device)
         dones = torch.Tensor(dones).to(device)
 
-        # TODO: calculate loss (or implement in method below)
+        # initialize target distribution matrix
         m = torch.zeros(self.batch_size, self.num_atoms).to(device)
-        log_q_dist = self.online_model.forward(states, log=True)  # should be shape(32,51,num_actions)
-        q_online = self.online_model(next_states)
-        a_star = torch.argmax((q_online * self.z_support).sum(-1), dim=1)  # a* = argmax_a(sum_i(z_i *p_i(x_{t+1},a)))
-        # todo: ich weiß nicht in welche Dimension wir das letztendlich summieren müssen, also nehm ich einfach mal die letzte, ev ändern
-        # todo: assert shape of log_q_dist /q_dist
-        next_dist = self.target_model.forward(next_states)  # Double DQN part
-        next_dist = next_dist[self.batch_size, a_star]
 
-        T_zj = rewards + self.discount_factor * (
-                    1 - dones) * self.z_support  # Tz = r + gamma*(1-done)*z_j TODO: hier ansetzen für Multistep?
-        T_zj = torch.clamp(T_zj, min=self.v_min, max=self.v_max)  # eingrenzen der Werte
-        # bj ist hier der index der atome auf denen die Distribution liegt
-        bj = (T_zj - self.v_min) / self.z_delta
-        # l und u sind die benachbarten indexe auf die bj projeziert werden soll
-        l = bj.floor()
-        u = bj.ceil()
-        # Die Wahrscheinlichkeiten, die eigentlich auf den index bj fallen würden werden jetzt auf die indexe l und u verteilt
-        offset = (torch.linspace(0, (self.batch_size - 1) * self.num_atoms, self.batch_size
-                                 ).long()
-                  .unsqueeze(1)
-                  .expand(self.batch_size, self.num_atoms)
-                  .to(device)
-                  )
+        with torch.no_grad():
+
+            # logarithmic output of online model for states
+            # shape (batch_size, action_space, num_atoms)
+            log_q_dist = self.online_model.forward(states, log=True)
+
+            # non-logarithmic output of online model for next states
+            q_online = self.online_model(next_states)
+
+            # get best actions for next states according to online model
+            # a* = argmax_a(sum_i(z_i *p_i(x_{t+1},a)))
+            a_star = torch.argmax((q_online * self.z_support).sum(-1), dim=1)
+
+            # todo: assert shape of log_q_dist / q_dist
+
+            # Double DQN part
+            # non-logarithmic output of target model
+            q_target = self.target_model.forward(next_states)
+
+            # get distributions for action a* selected by online model
+            next_dist = q_target[range(self.batch_size), a_star]
+
+            # Tz = r + gamma*(1-done)*z
+            # TODO: hier ansetzen für Multistep?
+            T_z = rewards.unsqueeze(-1) + torch.outer(self.discount_factor * (1 - dones), self.z_support)
+
+            # eingrenzen der Werte
+            T_z = T_z.clamp(min=self.v_min, max=self.v_max)
+
+            # bj ist hier der index der atome auf denen die Distribution liegt
+            bj = (T_z - self.v_min) / self.z_delta
+
+            # l und u sind die ganzzahligen indizes auf die bj projeziert werden soll
+            l = bj.floor().long()
+            u = bj.ceil().long()
+
+            # values to be added at the l and u indices
+            u_add = (u - bj) * next_dist
+            l_add = (bj - l) * next_dist
+
+            # values to be added at the indices where l == u
+            # todo: is this needed? It does not seem to be a part of the algorithm in the dist paper
+            same_add = (u == l) * next_dist
+
+            # add values to m at the given indices
+            m.view(-1).index_add_(0, u.view(-1) + self.index_offset, u_add.view(-1))
+            m.view(-1).index_add_(0, l.view(-1) + self.index_offset, l_add.view(-1))
+            m.view(-1).index_add_(0, l.view(-1) + self.index_offset, same_add.view(-1))
+
+            # Die Wahrscheinlichkeiten, die eigentlich auf den index bj fallen würden werden jetzt auf die indexe l und u verteilt
+            # offset = (torch.linspace(0, (self.batch_size - 1) * self.num_atoms, self.batch_size
+            #                          ).long()
+            #           .unsqueeze(1)
+            #           .expand(self.batch_size, self.num_atoms)
+            #           .to(device)
+            #           )
 
         # get approximating distribution of the model (target and online model)
         # calculate target distribution (n step returns)

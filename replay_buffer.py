@@ -61,7 +61,11 @@ class PrioritizedBuffer:
                                                 list of indices of the experiences in the buffer
         """
 
-        batch = [0] * batch_size
+        states = [0] * batch_size
+        actions = [0] * batch_size
+        rewards = [0] * batch_size
+        next_states = [0] * batch_size
+        dones = [0] * batch_size
         weights = [0] * batch_size
         indices = [0] * batch_size
 
@@ -87,9 +91,9 @@ class PrioritizedBuffer:
 
             weights[i] = weight
             indices[i] = idx
-            batch[i] = self.memory[idx]
+            states[i], actions[i], rewards[i], next_states[i], dones[i] = self.memory[idx]
 
-        return batch, weights, indices
+        return (states, actions, rewards, next_states, dones), weights, indices
 
     def set_prio(self, idx, priority):
         """
@@ -156,8 +160,8 @@ class SumMinMaxTree:
         assert 0 <= sample_priority < self.sum()
 
         current_index = 0
-        left_index = current_index * 2 + 1
-        while current_index < self.array_size:
+        while current_index < self.array_size - 1:
+            left_index = current_index * 2 + 1
             left_priority = self.sum_array[left_index]
             if left_priority > sample_priority:
                 current_index = left_index

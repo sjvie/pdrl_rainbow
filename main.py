@@ -47,7 +47,6 @@ def main():
             if total_frames > Config.start_learning_after and total_frames % Config.replay_period == 0:
                 if total_frames % Config.target_model_period == 0:
                     agent.update_target_model()
-
                 agent.train()
 
             state = next_state

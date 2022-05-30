@@ -61,10 +61,11 @@ class Model(nn.Module):
         advantage = self.advantage(c)
 
         # convert one dimensional tensor to two dimensions
-        advantage = advantage.view(self.action_space, self.num_atoms)
+        advantage = advantage.view(-1, self.action_space, self.num_atoms)
 
         # combine value and advantage stream
-        Q_dist = value + advantage - advantage.mean(dim=1, keepdim=True)
+        Q_dist = value.unsqueeze(dim=-2) + advantage - advantage.mean(dim=-1, keepdim=True)
+        Q_dist = Q_dist.squeeze()
 
         # apply softmax (with or without log)
         if log:
@@ -101,12 +102,12 @@ class NoisyLinear(nn.Module):
 
     def forward(self, x):
         """
-        :param x (Tensor): input of the layer. Tensor of dim [input_dim]
+        :param x (Tensor): input of the layer. Tensor of dim [batch_size, input_dim] or [input_dim]
         :return (Tensor): output of the layer. Tensor of dim [output_dim]
         """
 
         # calculate the linear part of the layer using the linear weights and bias
-        lin = torch.matmul(self.lin_weights, x) + self.lin_bias
+        lin = torch.matmul(self.lin_weights, x.T).T + self.lin_bias
 
         # get the random noise values
         e_weights, e_bias = self.get_eps_weight_bias()
@@ -114,7 +115,7 @@ class NoisyLinear(nn.Module):
         # calculate the noisy part of the layer
         noisy_bias_e = self.noisy_bias * e_bias
         noisy_weights_e = self.noisy_weights * e_weights
-        noisy = torch.matmul(noisy_weights_e, x) + noisy_bias_e
+        noisy = torch.matmul(noisy_weights_e, x.T).T + noisy_bias_e
 
         # combine linear and noisy part
         return lin + noisy

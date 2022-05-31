@@ -1,3 +1,4 @@
+import math
 import random
 import numpy as np
 
@@ -11,6 +12,7 @@ class PrioritizedBuffer:
         :param beta (float): hyperparameter. Exponent used in calculating the weights
         """
 
+        self.observation_space = observation_space
         self.alpha = alpha
         self.beta = beta
         self.max_size = size
@@ -61,13 +63,13 @@ class PrioritizedBuffer:
                                                 list of indices of the experiences in the buffer
         """
 
-        states = [0] * batch_size
-        actions = [0] * batch_size
-        rewards = [0] * batch_size
-        next_states = [0] * batch_size
-        dones = [0] * batch_size
-        weights = [0] * batch_size
-        indices = [0] * batch_size
+        states = np.zeros((batch_size, self.observation_space), dtype=np.uint8)
+        actions = np.zeros(batch_size, dtype=np.uint8)
+        rewards = np.zeros(batch_size, dtype=np.float32)
+        next_states = np.zeros((batch_size, self.observation_space), dtype=np.uint8)
+        dones = np.zeros(batch_size, bool)
+        weights = np.zeros(batch_size, dtype=np.float32)
+        indices = np.zeros(batch_size, dtype=np.uint8)
 
         # get total sum of priorities
         treesum = self.tree.sum()
@@ -140,6 +142,7 @@ class SumMinMaxTree:
         self.set_priority(data_index, priority)
 
     def set_priority(self, data_index, priority):
+        assert not math.isnan(priority)
         current_index = data_index + self.array_size - 1
         priority_diff = priority - self.sum_array[current_index]
         self.sum_array[current_index] = priority
@@ -156,11 +159,10 @@ class SumMinMaxTree:
             current_index = (current_index - 1) // 2
 
     def sample(self, sample_priority):
-        # todo: <= or <?
         assert 0 <= sample_priority < self.sum()
 
         current_index = 0
-        while current_index < self.array_size - 1:
+        while current_index < (self.array_size - 1):
             left_index = current_index * 2 + 1
             left_priority = self.sum_array[left_index]
             if left_priority > sample_priority:
@@ -169,7 +171,8 @@ class SumMinMaxTree:
                 sample_priority -= left_priority
                 current_index = left_index + 1
 
-        data_index = current_index - self.array_size - 1
+        data_index = current_index - (self.array_size - 1)
+        assert 0 <= data_index < self.capacity
         return data_index, self.sum_array[current_index]
 
     def clear(self):

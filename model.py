@@ -18,6 +18,9 @@ class Model(nn.Module):
         self.action_space = action_space
         self.num_atoms = num_atoms
 
+        self.softmax = nn.Softmax(dim=1)
+        self.log_softmax = nn.LogSoftmax(dim=1)
+
         if conv:
             self.conv = nn.Sequential(
                 nn.Conv2d(in_channels=input_dim, out_channels=32, kernel_size=8, stride=4), nn.ReLU(),
@@ -69,9 +72,9 @@ class Model(nn.Module):
 
         # apply softmax (with or without log)
         if log:
-            return torch.log_softmax(Q_dist, dim=1)
+            return self.log_softmax(Q_dist)
         else:
-            return torch.softmax(Q_dist, dim=1)
+            return self.softmax(Q_dist)
 
 
 class NoisyLinear(nn.Module):

@@ -48,19 +48,21 @@ class Agent:
         states, actions, rewards, next_states, dones = batch
         # convert to tensors
         states = torch.Tensor(states).to(device)
-        actions = torch.Tensor(actions).to(device)
+        actions = torch.Tensor(actions).to(device).long()
         rewards = torch.Tensor(rewards).to(device)
         next_states = torch.Tensor(next_states).to(device)
-        dones = torch.Tensor(dones).to(device)
+        dones = torch.Tensor(dones).to(device).long()
+        weights = torch.Tensor(weights).to(device)
 
         # initialize target distribution matrix
         m = torch.zeros(self.batch_size, self.num_atoms).to(device)
 
-        with torch.no_grad():
+        # logarithmic output of online model for states
+        # shape (batch_size, action_space, num_atoms)
+        log_q_dist = self.online_model.forward(states, log=True)
+        log_q_dist_a = log_q_dist[range(self.batch_size), actions]
 
-            # logarithmic output of online model for states
-            # shape (batch_size, action_space, num_atoms)
-            log_q_dist = self.online_model.forward(states, log=True)
+        with torch.no_grad():
 
             # non-logarithmic output of online model for next states
             q_online = self.online_model(next_states)
@@ -119,12 +121,14 @@ class Agent:
         # get Kullbeck-Leibler divergence of target distribution and the approximating distribution
 
         # get Kullbeck-Leibler divergence of target and approximating distribution
-        loss = torch.sum(m * torch.log(m) - m * log_q_dist)
-        # loss = - torch.sum(m * log_q_dist) # cross entropy
+        # the KL divergence calculation has some issues as parts of m can be 0.
+        # this makes the log(m) = -inf and loss = nan
+        # loss = torch.sum(m * torch.log(m) - m * log_q_dist) # KL divergence
+        loss = - torch.sum(m * log_q_dist_a) # cross entropy
 
         # update the priorities in the replay buffer
         for i in range(self.batch_size):
-            self.replay_buffer.set_prio(idxs[i], loss[i])
+            self.replay_buffer.set_prio(idxs[i], loss)
 
         # weight loss using weights from the replay buffer
         loss = loss * weights
@@ -135,6 +139,7 @@ class Agent:
         self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()
+        return loss
 
     def calc_loss(self, state, action, reward, next_state, done):
         pass

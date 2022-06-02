@@ -25,7 +25,7 @@ class Config:
 
     # todo
     # paper: ?
-    num_episodes = 100
+    num_episodes = 1000
 
     # paper: Memory size: 1M transitions
     replay_buffer_size = 1000000
@@ -57,6 +57,11 @@ class Config:
     # paper: Distributional min/max values: [-10, 10]
     distributional_v_min = -10
     distributional_v_max = 10
+
+    # paper: Observation down-sampling: (84, 84)
+    observation_width = 84
+    observation_height = 84
+
 
     # paper: title :P
     name = "RAINBOW"

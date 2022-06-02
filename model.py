@@ -110,7 +110,7 @@ class NoisyLinear(nn.Module):
         """
 
         # calculate the linear part of the layer using the linear weights and bias
-        lin = torch.matmul(self.lin_weights, x.T).T + self.lin_bias
+        lin = torch.matmul(self.lin_weights, x.transpose(0, -1)).transpose(0, -1) + self.lin_bias
 
         # get the random noise values
         e_weights, e_bias = self.get_eps_weight_bias()
@@ -118,7 +118,7 @@ class NoisyLinear(nn.Module):
         # calculate the noisy part of the layer
         noisy_bias_e = self.noisy_bias * e_bias
         noisy_weights_e = self.noisy_weights * e_weights
-        noisy = torch.matmul(noisy_weights_e, x.T).T + noisy_bias_e
+        noisy = torch.matmul(noisy_weights_e, x.transpose(0, -1)).transpose(0, -1) + noisy_bias_e
 
         # combine linear and noisy part
         return lin + noisy

@@ -4,7 +4,7 @@ import numpy as np
 
 
 class PrioritizedBuffer:
-    def __init__(self, size, observation_space, alpha, beta):
+    def __init__(self, size, observation_space, n_step_returns, alpha, beta):
         """
         :param size (int): size of the replay buffer
         :param observation_space (int): size of the observations
@@ -13,21 +13,25 @@ class PrioritizedBuffer:
         """
 
         self.observation_space = observation_space
+        self.n_step_returns = n_step_returns
         self.alpha = alpha
         self.beta = beta
         self.max_size = size
         self.current_size = 0
 
-        dt = np.dtype([("obs", np.uint8, (observation_space,)), ("action", np.uint8), ("reward", np.float32),
-                       ("next_obs", np.uint8, (observation_space,)), ("done", bool)])
+        dt = np.dtype(
+            [("obs", np.uint8, (observation_space,)), ("action", np.uint8), ("reward", np.float32), ("done", bool)])
 
         self.memory = np.zeros(size, dt)
+        self.n_memory = np.zeros(n_step_returns - 1, dt)
 
         self.tree = SumMinMaxTree(size)
-        self.max_prio = 1.0
         self.idx = 0
+        self.n_idx = 0
+        self.n_size = 0
+        self.n_max_size = n_step_returns - 1
 
-    def add(self, state, action, reward, next_state, done):
+    def add(self, state, action, reward, done):
         """ Add new experience to the buffer
         :param state (np array): state before the action. array with dim [observation_space]
         :param action (int): action that the agent chose
@@ -36,37 +40,50 @@ class PrioritizedBuffer:
         :param done (bool): whether the experience ends the episode
         """
 
-        # save experience to memory
-        self.memory[self.idx] = (state, action, reward, next_state, done)
+        if self.n_size >= self.n_step_returns - 1:
 
-        # set the priority of the new experience
-        if self.idx == 0:
-            # when the buffer is empty just use value 1.0
-            max_priority = 1.0
+            # move oldest experience from n_memory to memory
+            self.memory[self.idx] = self.n_memory[self.n_idx]
+
+            # set the priority of the new experience
+            if self.current_size == 0:
+                # when the buffer is empty just use value 1.0
+                max_priority = 1.0
+            else:
+                # take the max priority of all experiences
+                max_priority = self.tree.max()
+
+            # add the experience to the tree
+            self.tree.add(self.idx, max_priority ** self.alpha)
+
+            # move index by one
+            self.idx = (self.idx + 1) % self.max_size
+
+            # increase size until max_size is reached
+            if self.current_size < self.max_size:
+                self.current_size += 1
+
         else:
-            # take the max priority of all experiences
-            max_priority = self.tree.max()
+            self.n_size += 1
 
-        # add the experience to the tree
-        self.tree.add(self.idx, max_priority ** self.alpha)
+        # save new experience to n_memory
+        self.n_memory[self.n_idx] = (state, action, reward, done)
 
-        # set new size and index
-        if self.current_size < self.max_size:
-            self.current_size += 1
-        self.idx = (self.idx + 1) % self.max_size
+        # move n_index by one
+        self.n_idx = (self.n_idx + 1) % self.n_max_size
 
     def get_batch(self, batch_size=32):
         """
-        :param batch_size (int): size of the batch to be sampled
-        :return ([experience], [float], [int]): list of experiences consisting of (state, action, reward, next_state, done)
+        :param batch_size: (int): size of the batch to be sampled
+        :return ([experience], [float], [int]): list of experiences consisting of (state, action, reward, n_next_state, done)
                                                 list of weights for training
                                                 list of indices of the experiences in the buffer
         """
 
         states = np.zeros((batch_size, self.observation_space), dtype=np.uint8)
         actions = np.zeros(batch_size, dtype=np.uint8)
-        rewards = np.zeros(batch_size, dtype=np.float32)
-        next_states = np.zeros((batch_size, self.observation_space), dtype=np.uint8)
+        rewards = np.zeros((batch_size, self.n_step_returns), dtype=np.float32)
+        n_next_states = np.zeros((batch_size, self.observation_space), dtype=np.uint8)
         dones = np.zeros(batch_size, bool)
         weights = np.zeros(batch_size, dtype=np.float32)
         indices = np.zeros(batch_size, dtype=np.uint8)
@@ -93,15 +110,46 @@ class PrioritizedBuffer:
 
             weights[i] = weight
             indices[i] = idx
-            states[i], actions[i], rewards[i], next_states[i], dones[i] = self.memory[idx]
+            states[i], actions[i], rewards[i, 0], dones[i] = self.memory[idx]
 
-        return (states, actions, rewards, next_states, dones), weights, indices
+            # n step returns
+            # first, take the next (n-1) rewards from the main memory
+            n = 1
+            while n < self.n_step_returns:
+                mem_idx = (idx + n) % self.max_size
+
+                # if the end of the memory is reached, stop
+                if mem_idx == self.idx:
+                    break
+
+                # take the state after n steps
+                if n == self.n_step_returns:
+                    n_next_states[i] = self.memory[mem_idx][0]
+
+                rewards[i, n] = self.memory[mem_idx][2]
+                n += 1
+
+            # if the previous loop did not finish, take the next rewards from the n_memory
+            n_mem_idx_offset = n
+            while n < self.n_step_returns:
+                n_mem_idx = (n - n_mem_idx_offset) % self.n_max_size
+
+                # take the state after n steps
+                if n == self.n_step_returns:
+                    n_next_states[i] = self.memory[mem_idx][0]
+
+                rewards[i, n] = self.n_memory[n_mem_idx][2]
+                n += 1
+
+        return (states, actions, rewards, n_next_states, dones), weights, indices
 
     def set_prio(self, idx, priority):
         """
         :param idx (int): index of the experience
         :param priority (float): new priority of the experience. Alpha hyperparameter is applied in this method
         """
+
+        assert priority > 0
         self.tree.set_priority(idx, priority ** self.alpha)
 
     def save(self, file_name):

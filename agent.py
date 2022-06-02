@@ -1,3 +1,4 @@
+import numpy as np
 import torch
 from config import Config
 from model import Model
@@ -9,7 +10,8 @@ device = torch.device(Config.device if torch.cuda.is_available() else "cpu")
 
 class Agent:
 
-    def __init__(self, input_dim, action_space, num_atoms, v_min, v_max, discount_factor, batch_size, n, conv=True):
+    def __init__(self, input_dim, action_space, num_atoms, v_min, v_max, discount_factor, batch_size, n_step_returns,
+                 conv=True):
         self.input_dim = input_dim
         self.action_space = action_space
         self.conv = conv
@@ -19,8 +21,8 @@ class Agent:
         self.v_max = v_max
         self.z_delta = (v_max - v_min) / (num_atoms - 1)
         self.z_support = torch.arange(self.v_min, self.v_max + self.z_delta / 2, self.z_delta).to(device)
-        self.index_offset = (torch.arange(0, self.batch_size, 1/self.num_atoms).long() * 3).to(device)
-        self.n = n
+        self.index_offset = (torch.arange(0, self.batch_size, 1 / self.num_atoms).long() * 3).to(device)
+        self.n_step_returns = n_step_returns
         self.discount_factor = discount_factor
 
         self.online_model = Model(input_dim, action_space, num_atoms, conv=conv)
@@ -33,26 +35,30 @@ class Agent:
         self.replay_buffer_beta = Config.replay_buffer_beta_start
         self.replay_buffer = PrioritizedBuffer(Config.replay_buffer_size,
                                                input_dim,
+                                               n_step_returns,
                                                Config.replay_buffer_alpha,
                                                self.replay_buffer_beta)
 
     def update_target_model(self):
         self.target_model.load_state_dict(self.online_model.state_dict())
 
-    # todo: rename method?
-    def step(self, state, action, reward, next_state, done):
-        self.replay_buffer.add(state, action, reward, next_state, done)
+    def step(self, state, action, reward, done):
+        self.replay_buffer.add(state, action, reward, done)
 
     def train(self):
         batch, weights, idxs = self.replay_buffer.get_batch(self.batch_size)
-        states, actions, rewards, next_states, dones = batch
+        states, actions, rewards, n_next_states, dones = batch
+
         # convert to tensors
         states = torch.Tensor(states).to(device)
         actions = torch.Tensor(actions).to(device).long()
         rewards = torch.Tensor(rewards).to(device)
-        next_states = torch.Tensor(next_states).to(device)
+        n_next_states = torch.Tensor(n_next_states).to(device)
         dones = torch.Tensor(dones).to(device).long()
         weights = torch.Tensor(weights).to(device)
+
+        states = states / 255.0
+        n_next_states = n_next_states / 255.0
 
         # initialize target distribution matrix
         m = torch.zeros(self.batch_size, self.num_atoms).to(device)
@@ -64,8 +70,8 @@ class Agent:
 
         with torch.no_grad():
 
-            # non-logarithmic output of online model for next states
-            q_online = self.online_model(next_states)
+            # non-logarithmic output of online model for n next states
+            q_online = self.online_model(n_next_states)
 
             # get best actions for next states according to online model
             # a* = argmax_a(sum_i(z_i *p_i(x_{t+1},a)))
@@ -74,18 +80,21 @@ class Agent:
             # todo: assert shape of log_q_dist / q_dist
 
             # Double DQN part
-            # non-logarithmic output of target model
-            q_target = self.target_model.forward(next_states)
+            # non-logarithmic output of target model for n next states
+            q_target = self.target_model.forward(n_next_states)
 
             # get distributions for action a* selected by online model
             next_dist = q_target[range(self.batch_size), a_star]
-            G = []
-            for i in rewards:
-                for j in i:
-                    G[i]+= rewards[i][j]* self.discount_factor**(j+1)
+
+            # calculate n step return
+            G = torch.zeros(self.batch_size, dtype=torch.float32)
+            for i in range(self.batch_size):
+                for j in range(self.n_step_returns):
+                    G[i] += rewards[i][j] * self.discount_factor ** j
+
             # Tz = r + gamma*(1-done)*z
-            # TODO: hier ansetzen für Multistep?
-            T_z = G.unsqueeze(-1) + torch.outer(self.discount_factor**self.n * (1 - dones), self.z_support)
+            T_z = G.unsqueeze(-1) + torch.outer(self.discount_factor ** self.n_step_returns * (1 - dones),
+                                                self.z_support)
 
             # eingrenzen der Werte
             T_z = T_z.clamp(min=self.v_min, max=self.v_max)
@@ -101,7 +110,7 @@ class Agent:
             u_add = (u - bj) * next_dist
             l_add = (bj - l) * next_dist
 
-            # values to be added at the indices where l == u
+            # values to be added at the indices where l == u == bj
             # todo: is this needed? It does not seem to be a part of the algorithm in the dist paper
             same_add = (u == l) * next_dist
 
@@ -127,7 +136,7 @@ class Agent:
         # the KL divergence calculation has some issues as parts of m can be 0.
         # this makes the log(m) = -inf and loss = nan
         # loss = torch.sum(m * torch.log(m) - m * log_q_dist) # KL divergence
-        loss = - torch.sum(m * log_q_dist_a) # cross entropy
+        loss = - torch.sum(m * log_q_dist_a)  # cross entropy
 
         # update the priorities in the replay buffer
         for i in range(self.batch_size):
@@ -144,15 +153,14 @@ class Agent:
         self.optimizer.step()
         return loss
 
-    def calc_loss(self, state, action, reward, next_state, done):
-        pass
-
     def select_action(self, np_state):
         """
         :param np_state (np array): numpy array with dim [input_dim]
         :return (int): index of the selected action
         """
         state = torch.from_numpy(np_state).to(device)
+
+        state = state / 255.0
 
         with torch.no_grad():
             # select action using online model

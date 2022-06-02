@@ -11,16 +11,11 @@ from ale_py import ALEInterface
 def main():
     # todo: log stuff
 
-    # env = gym.make("CartPole-v1")
-    env = gym.make("ALE/Pong-v5", obs_type="grayscale")
-    env = gym.wrappers.ResizeObservation(env, (Config.observation_width, Config.observation_height))
-    env = gym.wrappers.FrameStack(env, Config.frame_stack)
-    env = gym.wrappers.FlattenObservation(env)
-    # TODO: what about action repetitions?
+    env, input_dim, action_space = cart_pole()
 
-    input_dim = Config.observation_width * Config.observation_height * Config.frame_stack
-    #action_space = env.action_space.n
-    action_space = env.action_space.n
+    # env, input_dim, action_space = pong()
+
+    # TODO: what about action repetitions?
 
     agent = Agent(input_dim,
                   action_space,
@@ -62,7 +57,28 @@ def main():
             state = next_state
             game_over = done
 
-        print('Episode: {} frames: {} Reward: {:.3f} Avg loss: {:.3f}'.format(episode, episode_frames, episode_reward, episode_loss/episode_frames))
+        print('Episode: {} frames: {} Reward: {:.3f} Avg loss: {:.3f}'.format(episode, episode_frames, episode_reward,
+                                                                              episode_loss / episode_frames))
+
+
+def cart_pole():
+    env = gym.make("CartPole-v1")
+    input_dim = env.observation_space.shape[0]
+    action_space = env.action_space.n
+
+    return env, input_dim, action_space
+
+
+def pong():
+    env = gym.make("ALE/Pong-v5", obs_type="grayscale")
+    env = gym.wrappers.ResizeObservation(env, (Config.observation_width, Config.observation_height))
+    env = gym.wrappers.FrameStack(env, Config.frame_stack)
+    env = gym.wrappers.FlattenObservation(env)
+    input_dim = Config.observation_width * Config.observation_height * Config.frame_stack
+    action_space = env.action_space.n
+
+    return env, input_dim, action_space
+
 
 if __name__ == "__main__":
     print("Hello, I am %s!" % Config.name)

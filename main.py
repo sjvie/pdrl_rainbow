@@ -1,6 +1,7 @@
 import numpy as np
 
 import config
+import gym_wrappers
 from agent import Agent
 from config import Config
 import gym
@@ -71,10 +72,14 @@ def cart_pole():
 
 
 def pong():
+    env = gym_wrappers.make_atari("ALE/Pong-v5")
+    env = gym_wrappers.wrap_deepmind(env, clip_rewards=False, frame_stack=True, scale=True)
+    """
     env = gym.make("ALE/Pong-v5", obs_type="grayscale")
     env = gym.wrappers.ResizeObservation(env, (Config.observation_width, Config.observation_height))
     env = gym.wrappers.FrameStack(env, Config.frame_stack)
     env = gym.wrappers.FlattenObservation(env)
+    """
     input_dim = Config.observation_width * Config.observation_height * Config.frame_stack
     action_space = env.action_space.n
 

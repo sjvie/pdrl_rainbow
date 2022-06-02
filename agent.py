@@ -9,7 +9,7 @@ device = torch.device(Config.device if torch.cuda.is_available() else "cpu")
 
 class Agent:
 
-    def __init__(self, input_dim, action_space, num_atoms, v_min, v_max, discount_factor, batch_size, conv=True):
+    def __init__(self, input_dim, action_space, num_atoms, v_min, v_max, discount_factor, batch_size, n, conv=True):
         self.input_dim = input_dim
         self.action_space = action_space
         self.conv = conv
@@ -20,7 +20,7 @@ class Agent:
         self.z_delta = (v_max - v_min) / (num_atoms - 1)
         self.z_support = torch.arange(self.v_min, self.v_max + self.z_delta / 2, self.z_delta).to(device)
         self.index_offset = (torch.arange(0, self.batch_size, 1/self.num_atoms).long() * 3).to(device)
-
+        self.n = n
         self.discount_factor = discount_factor
 
         self.online_model = Model(input_dim, action_space, num_atoms, conv=conv)
@@ -79,10 +79,13 @@ class Agent:
 
             # get distributions for action a* selected by online model
             next_dist = q_target[range(self.batch_size), a_star]
-
+            G = []
+            for i in rewards:
+                for j in i:
+                    G[i]+= rewards[i][j]* self.discount_factor**(j+1)
             # Tz = r + gamma*(1-done)*z
             # TODO: hier ansetzen für Multistep?
-            T_z = rewards.unsqueeze(-1) + torch.outer(self.discount_factor * (1 - dones), self.z_support)
+            T_z = G.unsqueeze(-1) + torch.outer(self.discount_factor**self.n * (1 - dones), self.z_support)
 
             # eingrenzen der Werte
             T_z = T_z.clamp(min=self.v_min, max=self.v_max)

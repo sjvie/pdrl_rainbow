@@ -1,11 +1,9 @@
 import numpy as np
-import torch
 
+import config
 from agent import Agent
 from config import Config
 import gym
-from ale_py.roms import Pong
-from ale_py import ALEInterface
 
 
 def main():
@@ -25,7 +23,8 @@ def main():
                   Config.discount_factor,
                   Config.batch_size,
                   Config.multi_step_n,
-                  conv=False)
+                  conv=Config.conv,
+                  observation_dt=Config.observation_dt)
 
     total_frames = 0
 
@@ -65,6 +64,8 @@ def cart_pole():
     env = gym.make("CartPole-v1")
     input_dim = env.observation_space.shape[0]
     action_space = env.action_space.n
+
+    config.set_cart_pole_config()
 
     return env, input_dim, action_space
 

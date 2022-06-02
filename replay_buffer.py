@@ -4,7 +4,7 @@ import numpy as np
 
 
 class PrioritizedBuffer:
-    def __init__(self, size, observation_space, n_step_returns, alpha, beta):
+    def __init__(self, size, observation_space, n_step_returns, alpha, beta, observation_dt=np.uint8):
         """
         :param size (int): size of the replay buffer
         :param observation_space (int): size of the observations
@@ -20,7 +20,7 @@ class PrioritizedBuffer:
         self.current_size = 0
 
         dt = np.dtype(
-            [("obs", np.uint8, (observation_space,)), ("action", np.uint8), ("reward", np.float32), ("done", bool)])
+            [("obs", observation_dt, (observation_space,)), ("action", np.uint8), ("reward", np.float32), ("done", bool)])
 
         self.memory = np.zeros(size, dt)
         self.n_memory = np.zeros(n_step_returns - 1, dt)

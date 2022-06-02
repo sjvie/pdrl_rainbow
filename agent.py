@@ -11,7 +11,7 @@ device = torch.device(Config.device if torch.cuda.is_available() else "cpu")
 class Agent:
 
     def __init__(self, input_dim, action_space, num_atoms, v_min, v_max, discount_factor, batch_size, n_step_returns,
-                 conv=True):
+                 conv=True, observation_dt=np.uint8):
         self.input_dim = input_dim
         self.action_space = action_space
         self.conv = conv
@@ -37,7 +37,8 @@ class Agent:
                                                input_dim,
                                                n_step_returns,
                                                Config.replay_buffer_alpha,
-                                               self.replay_buffer_beta)
+                                               self.replay_buffer_beta,
+                                               observation_dt=observation_dt)
 
     def update_target_model(self):
         self.target_model.load_state_dict(self.online_model.state_dict())

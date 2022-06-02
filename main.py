@@ -1,28 +1,19 @@
 import numpy as np
-import torch
 
+import config
 from agent import Agent
 from config import Config
 import gym
-import gym_wrappers
-from ale_py.roms import Pong
-from ale_py import ALEInterface
 
 
 def main():
     # todo: log stuff
-    env = gym_wrappers.make_atari("ALE/Pong-v5")
-    env = gym_wrappers.wrap_deepmind(env,clip_rewards=False,frame_stack=True,scale=True)
-    # env = gym.make("CartPole-v1")
-    """env = gym.make("ALE/Pong-v5", obs_type="grayscale")
-    env = gym.wrappers.ResizeObservation(env, (Config.observation_width, Config.observation_height))
-    env" = gym.wrappers.FrameStack(env, Config.frame_stack)
-    env = gym.wrappers.FlattenObservation(env)
+
+    env, input_dim, action_space = cart_pole()
+
+    # env, input_dim, action_space = pong()
+
     # TODO: what about action repetitions?
-    """
-    input_dim = Config.observation_width * Config.observation_height * Config.frame_stack
-    #action_space = env.action_space.n
-    action_space = env.action_space.n
 
     agent = Agent(input_dim,
                   action_space,
@@ -32,7 +23,8 @@ def main():
                   Config.discount_factor,
                   Config.batch_size,
                   Config.multi_step_n,
-                  conv=False)
+                  conv=Config.conv,
+                  observation_dt=Config.observation_dt)
 
     total_frames = 0
 
@@ -46,6 +38,7 @@ def main():
         while not game_over and episode_frames < Config.max_frames_per_episode:
             total_frames += 1
             episode_frames += 1
+
             action = agent.select_action(state)
             next_state, reward, done, _ = env.step(action)
             reward = np.clip(reward, -1, 1)
@@ -63,7 +56,30 @@ def main():
             state = next_state
             game_over = done
 
-        print('Episode: {} frames: {} Reward: {:.3f} Avg loss: {:.3f}'.format(episode, episode_frames, episode_reward, episode_loss/episode_frames))
+        print('Episode: {} frames: {} Reward: {:.3f} Avg loss: {:.3f}'.format(episode, episode_frames, episode_reward,
+                                                                              episode_loss / episode_frames))
+
+
+def cart_pole():
+    env = gym.make("CartPole-v1")
+    input_dim = env.observation_space.shape[0]
+    action_space = env.action_space.n
+
+    config.set_cart_pole_config()
+
+    return env, input_dim, action_space
+
+
+def pong():
+    env = gym.make("ALE/Pong-v5", obs_type="grayscale")
+    env = gym.wrappers.ResizeObservation(env, (Config.observation_width, Config.observation_height))
+    env = gym.wrappers.FrameStack(env, Config.frame_stack)
+    env = gym.wrappers.FlattenObservation(env)
+    input_dim = Config.observation_width * Config.observation_height * Config.frame_stack
+    action_space = env.action_space.n
+
+    return env, input_dim, action_space
+
 
 if __name__ == "__main__":
     print("Hello, I am %s!" % Config.name)

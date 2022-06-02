@@ -1,4 +1,11 @@
+import numpy as np
+
+
 class Config:
+
+    conv = True
+    observation_dt = np.uint8
+
     # paper: Adam learning rate: 0.0000625
     adam_learning_rate = 0.0000625
 
@@ -25,7 +32,7 @@ class Config:
 
     # todo
     # paper: ?
-    num_episodes = 1000
+    num_episodes = 10000
 
     # paper: Memory size: 1M transitions
     replay_buffer_size = 1000000
@@ -62,9 +69,19 @@ class Config:
     observation_width = 84
     observation_height = 84
 
-
     # paper: title :P
     name = "RAINBOW"
 
-    #GPU Device
+    # GPU Device
     device = "cuda:0"
+
+
+def set_cart_pole_config():
+    Config.start_learning_after = 800
+    Config.replay_buffer_size = 10000
+    Config.target_model_period = 320
+
+    Config.conv = False
+    Config.observation_dt = np.float32
+
+    Config.batch_size = 32

@@ -4,20 +4,22 @@ import torch
 from agent import Agent
 from config import Config
 import gym
+import gym_wrappers
 from ale_py.roms import Pong
 from ale_py import ALEInterface
 
 
 def main():
     # todo: log stuff
-
+    env = gym_wrappers.make_atari("ALE/Pong-v5")
+    env = gym_wrappers.wrap_deepmind(env,clip_rewards=False,frame_stack=True,scale=True)
     # env = gym.make("CartPole-v1")
-    env = gym.make("ALE/Pong-v5", obs_type="grayscale")
+    """env = gym.make("ALE/Pong-v5", obs_type="grayscale")
     env = gym.wrappers.ResizeObservation(env, (Config.observation_width, Config.observation_height))
-    env = gym.wrappers.FrameStack(env, Config.frame_stack)
+    env" = gym.wrappers.FrameStack(env, Config.frame_stack)
     env = gym.wrappers.FlattenObservation(env)
     # TODO: what about action repetitions?
-
+    """
     input_dim = Config.observation_width * Config.observation_height * Config.frame_stack
     #action_space = env.action_space.n
     action_space = env.action_space.n
@@ -44,7 +46,6 @@ def main():
         while not game_over and episode_frames < Config.max_frames_per_episode:
             total_frames += 1
             episode_frames += 1
-
             action = agent.select_action(state)
             next_state, reward, done, _ = env.step(action)
             reward = np.clip(reward, -1, 1)

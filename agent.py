@@ -1,3 +1,5 @@
+import math
+
 import numpy as np
 import torch
 from config import Config
@@ -10,11 +12,8 @@ device = torch.device(Config.device if torch.cuda.is_available() else "cpu")
 
 class Agent:
 
-    def __init__(self, input_dim, action_space, num_atoms, v_min, v_max, discount_factor, batch_size, n_step_returns,
-                 conv=True, observation_dt=np.uint8):
-        self.input_dim = input_dim
+    def __init__(self, observation_shape, conv_channels, action_space, num_atoms, v_min, v_max, discount_factor, batch_size, n_step_returns, observation_dt=np.uint8):
         self.action_space = action_space
-        self.conv = conv
         self.batch_size = batch_size
         self.num_atoms = num_atoms
         self.v_min = v_min
@@ -25,7 +24,7 @@ class Agent:
         self.n_step_returns = n_step_returns
         self.discount_factor = discount_factor
 
-        self.online_model = Model(input_dim, action_space, num_atoms, conv=conv)
+        self.online_model = Model(conv_channels, action_space, num_atoms, device)
         self.target_model = copy.deepcopy(self.online_model)
         self.optimizer = torch.optim.Adam(self.online_model.parameters(),
                                           lr=Config.adam_learning_rate,
@@ -34,7 +33,7 @@ class Agent:
         # todo: linearly increase beta up to Config.replay_buffer_end
         self.replay_buffer_beta = Config.replay_buffer_beta_start
         self.replay_buffer = PrioritizedBuffer(Config.replay_buffer_size,
-                                               input_dim,
+                                               observation_shape,
                                                n_step_returns,
                                                Config.replay_buffer_alpha,
                                                self.replay_buffer_beta,
@@ -88,7 +87,7 @@ class Agent:
             next_dist = q_target[range(self.batch_size), a_star]
 
             # calculate n step return
-            G = torch.zeros(self.batch_size, dtype=torch.float32)
+            G = torch.zeros(self.batch_size, dtype=torch.float32).to(device)
             for i in range(self.batch_size):
                 for j in range(self.n_step_returns):
                     G[i] += rewards[i][j] * self.discount_factor ** j
@@ -156,7 +155,7 @@ class Agent:
 
     def select_action(self, np_state):
         """
-        :param np_state (np array): numpy array with dim [input_dim]
+        :param np_state: (np array) numpy array with shape observation_shape
         :return (int): index of the selected action
         """
         state = torch.from_numpy(np_state).to(device)

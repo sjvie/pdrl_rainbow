@@ -46,7 +46,6 @@ class Config:
     # paper: Max frames per episode: 108K
     max_frames_per_episode = 108000
 
-    # todo: is this the gamma exponent used in the rainbow paper?
     # paper: Prioritization exponent gamma: 0.5
     replay_buffer_alpha = 0.5
 
@@ -75,13 +74,6 @@ class Config:
     # GPU Device
     device = "cuda:0"
 
-
-def set_cart_pole_config():
-    Config.start_learning_after = 800
-    Config.replay_buffer_size = 10000
-    Config.target_model_period = 320
-
-    Config.conv = False
-    Config.observation_dt = np.float32
-
-    Config.batch_size = 32
+    # LOGGING
+    log_per_frames = 1000
+    log_episode_end = True

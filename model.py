@@ -6,7 +6,7 @@ import torch
 
 class Model(nn.Module):
 
-    def __init__(self, input_dim, action_space, num_atoms, conv=True):
+    def __init__(self, conv_channels, action_space, num_atoms, device):
         """
         :param input_dim (int): the length of the input vector
         :param action_space (int): the amount of actions
@@ -14,36 +14,36 @@ class Model(nn.Module):
         """
         super().__init__()
 
-        self.input_dim = input_dim
         self.action_space = action_space
         self.num_atoms = num_atoms
 
         self.softmax = nn.Softmax(dim=1)
         self.log_softmax = nn.LogSoftmax(dim=1)
 
-        if conv:
-            self.conv = nn.Sequential(
-                nn.Conv2d(in_channels=input_dim, out_channels=32, kernel_size=8, stride=4), nn.ReLU(),
-                nn.Conv2d(in_channels=32, out_channels=64, kernel_size=4, stride=2), nn.ReLU(),
-                nn.Conv2d(in_channels=64, out_channels=64, kernel_size=3, stride=1), nn.ReLU()
-            )
-        else:
-            self.conv = nn.Sequential(
-                nn.Linear(in_features=input_dim, out_features=64), nn.ReLU()
-            )
+        self.conv = nn.Sequential(
+            nn.Conv2d(in_channels=conv_channels, out_channels=32, kernel_size=8, stride=4, device=device), nn.ReLU(),
+            nn.Conv2d(in_channels=32, out_channels=64, kernel_size=4, stride=2, device=device), nn.ReLU(),
+            nn.Conv2d(in_channels=64, out_channels=64, kernel_size=3, stride=1, device=device), nn.ReLU()
+        )
 
         sigma_zero = 0.5
 
+        # the size of the output of the convolutional layer
+        # 64 * 7 * 7
+        self.conv_output_size = 3136
+
         self.value = nn.Sequential(
-            NoisyLinear(input_dim=64, output_dim=512, sigma_zero=sigma_zero), nn.ReLU(),
-            NoisyLinear(input_dim=512, output_dim=num_atoms, sigma_zero=sigma_zero),
+            NoisyLinear(input_dim=self.conv_output_size, output_dim=512, sigma_zero=sigma_zero, device=device),
+            nn.ReLU(),
+            NoisyLinear(input_dim=512, output_dim=num_atoms, sigma_zero=sigma_zero, device=device),
             # nn.Linear(in_channels=64, out_channels=512), nn.ReLU(),
             # nn.Linear(512, 1)
         )
 
         self.advantage = nn.Sequential(
-            NoisyLinear(input_dim=64, output_dim=512, sigma_zero=sigma_zero), nn.ReLU(),
-            NoisyLinear(input_dim=512, output_dim=action_space * num_atoms, sigma_zero=sigma_zero),
+            NoisyLinear(input_dim=self.conv_output_size, output_dim=512, sigma_zero=sigma_zero, device=device),
+            nn.ReLU(),
+            NoisyLinear(input_dim=512, output_dim=action_space * num_atoms, sigma_zero=sigma_zero, device=device),
             # nn.Linear(in_channels=64, out_channels=512), nn.ReLU(),
             # nn.Linear(512, action_space)
         )
@@ -56,6 +56,7 @@ class Model(nn.Module):
         """
         # convolutional layers
         c = self.conv(x)
+        c = c.view(-1, self.conv_output_size)
 
         # value stream (linear layers)
         value = self.value(c)
@@ -78,19 +79,20 @@ class Model(nn.Module):
 
 
 class NoisyLinear(nn.Module):
-    def __init__(self, input_dim, output_dim, sigma_zero=0.5):
+    def __init__(self, input_dim, output_dim, device, sigma_zero=0.5):
         super().__init__()
         self.input_dim = input_dim
         self.output_dim = output_dim
+        self.device = device
         self.sigma_zero = sigma_zero
 
         self.v_eps_function = np.vectorize(self.eps_function)
 
-        self.lin_weights = nn.Parameter(torch.Tensor(output_dim, input_dim))
-        self.noisy_weights = nn.Parameter(torch.Tensor(output_dim, input_dim))
+        self.lin_weights = nn.Parameter(torch.Tensor(output_dim, input_dim).to(device))
+        self.noisy_weights = nn.Parameter(torch.Tensor(output_dim, input_dim).to(device))
 
-        self.lin_bias = nn.Parameter(torch.Tensor(output_dim))
-        self.noisy_bias = nn.Parameter(torch.Tensor(output_dim))
+        self.lin_bias = nn.Parameter(torch.Tensor(output_dim).to(device))
+        self.noisy_bias = nn.Parameter(torch.Tensor(output_dim).to(device))
 
         # initialize the weights and bias according to section 3.2 in the noisy net paper
         # init linear weights and bias from an independent uniform distribution U[-1/sqrt(p), 1/sqrt(p)]
@@ -136,11 +138,11 @@ class NoisyLinear(nn.Module):
         """
 
         # get first random vector and apply function
-        e_i = torch.randn(self.input_dim)
+        e_i = torch.randn(self.input_dim).to(self.device)
         e_i = self.eps_function(e_i)
 
         # get second random vector and apply function
-        e_j = torch.randn(self.output_dim)
+        e_j = torch.randn(self.output_dim).to(self.device)
         e_j = self.eps_function(e_j)
 
         # combine vectors to get the epsilon matrix

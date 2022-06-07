@@ -1,4 +1,5 @@
 import numpy as np
+import torch
 
 import config
 import gym_wrappers
@@ -10,13 +11,14 @@ import gym
 def main():
     # todo: log stuff
 
-    env, input_dim, action_space = cart_pole()
-
-    # env, input_dim, action_space = pong()
+    env, observation_shape, action_space = pong()
 
     # TODO: what about action repetitions?
 
-    agent = Agent(input_dim,
+    print("Cuda available: %s" % torch.cuda.is_available())
+
+    agent = Agent(observation_shape,
+                  Config.frame_stack,
                   action_space,
                   Config.distributional_atoms,
                   Config.distributional_v_min,
@@ -24,13 +26,13 @@ def main():
                   Config.discount_factor,
                   Config.batch_size,
                   Config.multi_step_n,
-                  conv=Config.conv,
                   observation_dt=Config.observation_dt)
 
     total_frames = 0
 
     for episode in range(1, Config.num_episodes + 1):
         state = env.reset()
+        state = process_state(state)
         game_over = False
         episode_frames = 0
         episode_reward = 0
@@ -42,6 +44,7 @@ def main():
 
             action = agent.select_action(state)
             next_state, reward, done, _ = env.step(action)
+            next_state = process_state(next_state)
             reward = np.clip(reward, -1, 1)
             episode_reward += reward
             # todo: action repetitions?
@@ -57,8 +60,22 @@ def main():
             state = next_state
             game_over = done
 
-        print('Episode: {} frames: {} Reward: {:.3f} Avg loss: {:.3f}'.format(episode, episode_frames, episode_reward,
-                                                                              episode_loss / episode_frames))
+            if total_frames % Config.log_per_frames == 0:
+                #print(agent.online_model.conv.state_dict()["0.weight"])
+                print('E/ef/tf: {}/{}/{} | Avg. reward: {:.3f} | Avg loss: {:.3f}'.format(episode, episode_frames, total_frames,
+                                                                                      episode_reward / episode_frames,
+                                                                                      episode_loss / episode_frames))
+
+
+        if Config.log_episode_end:
+            print('[EPISODE END] E/ef/tf: {}/{}/{} | Avg. reward: {:.3f} | Avg loss: {:.3f}'.format(episode, episode_frames,
+                                                                                     total_frames,
+                                                                                     episode_reward / episode_frames,
+                                                                                     episode_loss / episode_frames))
+
+
+def process_state(state):
+    return np.array(state).squeeze()
 
 
 def cart_pole():
@@ -72,18 +89,18 @@ def cart_pole():
 
 
 def pong():
-    env = gym_wrappers.make_atari("ALE/Pong-v5")
-    env = gym_wrappers.wrap_deepmind(env, clip_rewards=False, frame_stack=True, scale=True)
-    """
+    # env = gym_wrappers.make_atari("ALE/Pong-v5")
+    # env = gym_wrappers.wrap_deepmind(env, clip_rewards=False, frame_stack=True, scale=True)
+
     env = gym.make("ALE/Pong-v5", obs_type="grayscale")
     env = gym.wrappers.ResizeObservation(env, (Config.observation_width, Config.observation_height))
     env = gym.wrappers.FrameStack(env, Config.frame_stack)
-    env = gym.wrappers.FlattenObservation(env)
-    """
-    input_dim = Config.observation_width * Config.observation_height * Config.frame_stack
+    env = gym.wrappers.RecordVideo(env, "vid", episode_trigger=lambda x: x % 10 == 0)
+
+    observation_shape = (Config.frame_stack, Config.observation_width, Config.observation_height)
     action_space = env.action_space.n
 
-    return env, input_dim, action_space
+    return env, observation_shape, action_space
 
 
 if __name__ == "__main__":

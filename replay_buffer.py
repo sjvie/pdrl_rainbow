@@ -4,7 +4,7 @@ import numpy as np
 
 
 class PrioritizedBuffer:
-    def __init__(self, size, observation_space, n_step_returns, alpha, beta, observation_dt=np.uint8):
+    def __init__(self, size, observation_shape, n_step_returns, alpha, beta, observation_dt=np.uint8):
         """
         :param size (int): size of the replay buffer
         :param observation_space (int): size of the observations
@@ -12,7 +12,7 @@ class PrioritizedBuffer:
         :param beta (float): hyperparameter. Exponent used in calculating the weights
         """
 
-        self.observation_space = observation_space
+        self.observation_shape = observation_shape
         self.n_step_returns = n_step_returns
         self.alpha = alpha
         self.beta = beta
@@ -20,7 +20,7 @@ class PrioritizedBuffer:
         self.current_size = 0
 
         dt = np.dtype(
-            [("obs", observation_dt, (observation_space,)), ("action", np.uint8), ("reward", np.float32), ("done", bool)])
+            [("obs", observation_dt, observation_shape), ("action", np.uint8), ("reward", np.float32), ("done", bool)])
 
         self.memory = np.zeros(size, dt)
         self.n_memory = np.zeros(n_step_returns - 1, dt)
@@ -80,10 +80,10 @@ class PrioritizedBuffer:
                                                 list of indices of the experiences in the buffer
         """
 
-        states = np.zeros((batch_size, self.observation_space), dtype=np.uint8)
+        states = np.zeros((batch_size,) + self.observation_shape, dtype=np.uint8)
         actions = np.zeros(batch_size, dtype=np.uint8)
         rewards = np.zeros((batch_size, self.n_step_returns), dtype=np.float32)
-        n_next_states = np.zeros((batch_size, self.observation_space), dtype=np.uint8)
+        n_next_states = np.zeros((batch_size,) + self.observation_shape, dtype=np.uint8)
         dones = np.zeros(batch_size, bool)
         weights = np.zeros(batch_size, dtype=np.float32)
         indices = np.zeros(batch_size, dtype=np.uint8)

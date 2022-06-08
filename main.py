@@ -1,3 +1,5 @@
+import time
+
 import numpy as np
 import torch
 
@@ -30,6 +32,8 @@ def main():
 
     total_frames = 0
 
+    start_time = time.time()
+
     for episode in range(1, Config.num_episodes + 1):
         state = env.reset()
         state = process_state(state)
@@ -37,6 +41,7 @@ def main():
         episode_frames = 0
         episode_reward = 0
         episode_loss = 0
+        episode_start_time = time.time()
 
         while not game_over and episode_frames < Config.max_frames_per_episode:
             total_frames += 1
@@ -61,17 +66,22 @@ def main():
             game_over = done
 
             if total_frames % Config.log_per_frames == 0:
-                #print(agent.online_model.conv.state_dict()["0.weight"])
-                print('E/ef/tf: {}/{}/{} | Avg. reward: {:.3f} | Avg loss: {:.3f}'.format(episode, episode_frames, total_frames,
-                                                                                      episode_reward / episode_frames,
-                                                                                      episode_loss / episode_frames))
+                # print(agent.online_model.conv.state_dict()["0.weight"])
+                print('E/ef/tf: {}/{}/{} | Avg. reward: {:.3f} | Avg loss: {:.3f}'.format(episode, episode_frames,
+                                                                                          total_frames,
+                                                                                          episode_reward / episode_frames,
+                                                                                          episode_loss / episode_frames))
 
-
+        episode_end_time = time.time()
         if Config.log_episode_end:
-            print('[EPISODE END] E/ef/tf: {}/{}/{} | Avg. reward: {:.3f} | Avg loss: {:.3f}'.format(episode, episode_frames,
-                                                                                     total_frames,
-                                                                                     episode_reward / episode_frames,
-                                                                                     episode_loss / episode_frames))
+            fps = episode_frames / (episode_end_time - episode_start_time)
+            print(
+                '[EPISODE END] E/ef/tf: {}/{}/{} | fps: {:.2f} | Avg. reward: {:.3f} | Avg loss: {:.3f}'.format(episode,
+                                                                                                                episode_frames,
+                                                                                                                total_frames,
+                                                                                                                fps,
+                                                                                                                episode_reward / episode_frames,
+                                                                                                                episode_loss / episode_frames))
 
 
 def process_state(state):

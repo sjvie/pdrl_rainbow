@@ -12,7 +12,8 @@ device = torch.device(Config.device if torch.cuda.is_available() else "cpu")
 
 class Agent:
 
-    def __init__(self, observation_shape, conv_channels, action_space, num_atoms, v_min, v_max, discount_factor, batch_size, n_step_returns, observation_dt=np.uint8):
+    def __init__(self, observation_shape, conv_channels, action_space, num_atoms, v_min, v_max, discount_factor,
+                 batch_size, n_step_returns, observation_dt=np.uint8):
         self.action_space = action_space
         self.batch_size = batch_size
         self.num_atoms = num_atoms
@@ -20,7 +21,7 @@ class Agent:
         self.v_max = v_max
         self.z_delta = (v_max - v_min) / (num_atoms - 1)
         self.z_support = torch.arange(self.v_min, self.v_max + self.z_delta / 2, self.z_delta).to(device)
-        self.index_offset = (torch.arange(0, self.batch_size, 1 / self.num_atoms).long() * 3).to(device)
+        self.index_offset = (torch.arange(0, self.batch_size, 1 / self.num_atoms).long() * self.num_atoms).to(device)
         self.n_step_returns = n_step_returns
         self.discount_factor = discount_factor
 
@@ -135,12 +136,12 @@ class Agent:
         # get Kullbeck-Leibler divergence of target and approximating distribution
         # the KL divergence calculation has some issues as parts of m can be 0.
         # this makes the log(m) = -inf and loss = nan
-        # loss = torch.sum(m * torch.log(m) - m * log_q_dist) # KL divergence
-        loss = - torch.sum(m * log_q_dist_a)  # cross entropy
+        # loss = torch.sum(m * torch.log(m) - m * log_q_dist, dim=-1) # KL divergence
+        loss = - torch.sum(m * log_q_dist_a, dim=-1)  # cross entropy
 
         # update the priorities in the replay buffer
         for i in range(self.batch_size):
-            self.replay_buffer.set_prio(idxs[i], loss)
+            self.replay_buffer.set_prio(idxs[i], loss[i])
 
         # weight loss using weights from the replay buffer
         loss = loss * weights

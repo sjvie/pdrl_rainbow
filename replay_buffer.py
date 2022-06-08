@@ -86,7 +86,7 @@ class PrioritizedBuffer:
         n_next_states = np.zeros((batch_size,) + self.observation_shape, dtype=np.uint8)
         dones = np.zeros(batch_size, bool)
         weights = np.zeros(batch_size, dtype=np.float32)
-        indices = np.zeros(batch_size, dtype=np.uint8)
+        indices = np.zeros(batch_size, dtype=np.uint32)
 
         # get total sum of priorities
         treesum = self.tree.sum()
@@ -115,7 +115,7 @@ class PrioritizedBuffer:
             # n step returns
             # first, take the next (n-1) rewards from the main memory
             n = 1
-            while n < self.n_step_returns:
+            while n <= self.n_step_returns:
                 mem_idx = (idx + n) % self.max_size
 
                 # if the end of the memory is reached, stop
@@ -125,20 +125,22 @@ class PrioritizedBuffer:
                 # take the state after n steps
                 if n == self.n_step_returns:
                     n_next_states[i] = self.memory[mem_idx][0]
+                else:
+                    rewards[i, n] = self.memory[mem_idx][2]
 
-                rewards[i, n] = self.memory[mem_idx][2]
                 n += 1
 
             # if the previous loop did not finish, take the next rewards from the n_memory
             n_mem_idx_offset = n
-            while n < self.n_step_returns:
+            while n <= self.n_step_returns:
                 n_mem_idx = (n - n_mem_idx_offset) % self.n_max_size
 
                 # take the state after n steps
                 if n == self.n_step_returns:
                     n_next_states[i] = self.memory[mem_idx][0]
+                else:
+                    rewards[i, n] = self.n_memory[n_mem_idx][2]
 
-                rewards[i, n] = self.n_memory[n_mem_idx][2]
                 n += 1
 
         return (states, actions, rewards, n_next_states, dones), weights, indices
@@ -199,8 +201,8 @@ class SumMinMaxTree:
         current_index = (current_index - 1) // 2
 
         while current_index >= 0:
-            self.sum_array[current_index] += priority_diff
             child_index = current_index * 2 + 1
+            self.sum_array[current_index] = self.sum_array[child_index] + self.sum_array[child_index + 1]
             self.min_array[current_index] = min(self.min_array[child_index], self.min_array[child_index + 1])
             self.max_array[current_index] = max(self.max_array[child_index], self.max_array[child_index + 1])
 
@@ -213,7 +215,7 @@ class SumMinMaxTree:
         while current_index < (self.array_size - 1):
             left_index = current_index * 2 + 1
             left_priority = self.sum_array[left_index]
-            if left_priority > sample_priority:
+            if left_priority >= sample_priority:
                 current_index = left_index
             else:
                 sample_priority -= left_priority

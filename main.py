@@ -27,8 +27,7 @@ def main():
                   Config.distributional_v_max,
                   Config.discount_factor,
                   Config.batch_size,
-                  Config.multi_step_n,
-                  observation_dt=Config.observation_dt)
+                  Config.multi_step_n)
 
     total_frames = 0
 

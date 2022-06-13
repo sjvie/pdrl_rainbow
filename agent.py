@@ -27,8 +27,6 @@ class Agent:
         self.n_step_returns = n_step_returns
         self.discount_factor = discount_factor
         self.discount_factor_k = torch.zeros(self.n_step_returns, dtype=torch.float32, device=device)
-        for j in range(self.n_step_returns):
-            self.discount_factor_k[j] = self.discount_factor ** j
 
         self.online_model = Model(conv_channels, action_space, num_atoms, device)
         self.target_model = copy.deepcopy(self.online_model)
@@ -45,6 +43,7 @@ class Agent:
                                                Config.replay_buffer_alpha,
                                                self.replay_buffer_beta,
                                                device=device,
+                                               discount_factor=self.discount_factor,
                                                tensor_memory=tensor_replay_buffer)
 
         self.episode_counter = 0
@@ -63,7 +62,7 @@ class Agent:
         self.replay_buffer.add(state, action, reward, done)
 
     def train(self):
-        batch, weights, idxs = self.replay_buffer.get_batch(self.batch_size)
+        batch, weights, idxs = self.replay_buffer.get_batch(batch_size=self.batch_size)
         states, actions, rewards, n_next_states, dones = batch
 
         if not self.tensor_replay_buffer:
@@ -112,10 +111,10 @@ class Agent:
             #     for j in range(self.n_step_returns):
             #         G[i] += rewards[i][j] * self.discount_factor ** j
 
-            G = torch.sum(rewards * self.discount_factor_k, -1)
+            #G = torch.sum(rewards * self.discount_factor_k, -1)
 
             # Tz = r + gamma*(1-done)*z
-            T_z = G.unsqueeze(-1) + torch.outer(self.discount_factor ** self.n_step_returns * (1 - dones),
+            T_z = rewards.unsqueeze(-1) + torch.outer(self.discount_factor ** self.n_step_returns * (1 - dones),
                                                 self.z_support)
 
             # eingrenzen der Werte

@@ -5,7 +5,8 @@ import torch
 
 
 class PrioritizedBuffer:
-    def __init__(self, size, observation_shape, n_step_returns, alpha, beta, device, tensor_memory=False):
+    def __init__(self, size, observation_shape, n_step_returns, alpha, beta, device, discount_factor,
+                 tensor_memory=False):
         """
         :param size (int): size of the replay buffer
         :param observation_space (int): size of the observations
@@ -18,30 +19,30 @@ class PrioritizedBuffer:
         self.alpha = alpha
         self.beta = beta
         self.device = device
+        self.discount_factor = discount_factor
         self.tensor_memory = tensor_memory
         self.max_size = size
         self.current_size = 0
 
-        memory_size = size + n_step_returns - 1
+        self.memory_size = size + n_step_returns
         if self.tensor_memory:
-            self.obs_memory = torch.zeros((memory_size,) + observation_shape, dtype=torch.uint8, device=self.device)
-            self.action_memory = torch.zeros(memory_size, dtype=torch.uint8, device=self.device)
-            self.reward_memory = torch.zeros(memory_size, dtype=torch.float32, device=self.device)
-            self.done_memory = torch.zeros(memory_size, dtype=torch.bool, device=self.device)
+            self.obs_memory = torch.zeros((self.memory_size,) + observation_shape, dtype=torch.uint8,
+                                          device=self.device)
+            self.action_memory = torch.zeros(self.memory_size, dtype=torch.uint8, device=self.device)
+            self.reward_memory = torch.zeros(self.memory_size, dtype=torch.float32, device=self.device)
+            self.done_memory = torch.zeros(self.memory_size, dtype=torch.bool, device=self.device)
         else:
             dt = np.dtype(
                 [("obs", np.uint8, observation_shape), ("action", np.uint8), ("reward", np.float32), ("done", bool)])
-            self.memory = np.zeros(memory_size, dt)
+            self.memory = np.zeros(self.memory_size, dt)
 
         self.tree = SumMinMaxTree(size, tensor_memory=False, device=device)
         self.idx = 0
-        self.n_idx = 0
-        self.n_idx_offset = size
-        self.n_size = 0
-        self.n_max_size = n_step_returns - 1
+        self.tree_idx = 0
 
     def add(self, state, action, reward, done):
         """ Add new experience to the buffer
+        # todo update doc
         :param state (np array): state before the action. array with dim [observation_space]
         :param action (int): action that the agent chose
         :param reward (float): reward that the agent got from the environment
@@ -49,39 +50,32 @@ class PrioritizedBuffer:
         :param done (bool): whether the experience ends the episode
         """
 
-        if self.n_size >= self.n_step_returns - 1:
+        self.set_memory(self.idx, (state, action, reward, done))
 
-            # move oldest experience from n-memory to memory
-            # self.memory[self.idx] = self.memory[self.n_idx + self.n_idx_offset]
-            self.set_memory(self.idx, self.get_n_memory(self.n_idx))
-
+        if self.current_size >= self.n_step_returns:
             # set the priority of the new experience
-            if self.current_size == 0:
-                # when the buffer is empty just use value 1.0
+            if self.current_size == self.n_step_returns:
+                # when the buffer is empty, just use value 1.0
                 max_priority = 1.0
             else:
                 # take the max priority of all experiences
                 max_priority = self.tree.max()
 
             # add the experience to the tree
-            self.tree.add(self.idx, max_priority ** self.alpha)
+            self.tree.add(self.tree_idx, max_priority)
+            self.tree_idx = (self.tree_idx + 1) % self.max_size
 
-            # move index by one
-            self.idx = (self.idx + 1) % self.max_size
+        # add to the rewards of the last n experiences
+        for i in range(1, self.n_step_returns):
+            r_idx = (self.idx - i) % self.memory_size
+            self.add_reward(r_idx, reward * self.discount_factor ** i)
 
-            # increase size until max_size is reached
-            if self.current_size < self.max_size:
-                self.current_size += 1
+        # move index by one
+        self.idx = (self.idx + 1) % self.memory_size
 
-        else:
-            self.n_size += 1
-
-        # save new experience to n-memory
-        # self.memory[self.n_idx + self.n_idx_offset] = (state, action, reward, done)
-        self.set_n_memory(self.n_idx, (state, action, reward, done))
-
-        # move n_index by one
-        self.n_idx = (self.n_idx + 1) % self.n_max_size
+        # increase size until max_size is reached
+        if self.current_size < self.memory_size:
+            self.current_size += 1
 
     def get_batch(self, batch_size=32):
         """
@@ -94,7 +88,7 @@ class PrioritizedBuffer:
         if self.tensor_memory:
             states = torch.empty((batch_size,) + self.observation_shape, dtype=torch.uint8, device=self.device)
             actions = torch.empty(batch_size, dtype=torch.uint8, device=self.device)
-            rewards = torch.empty((batch_size, self.n_step_returns), dtype=torch.float32, device=self.device)
+            rewards = torch.empty(batch_size, dtype=torch.float32, device=self.device)
             n_next_states = torch.empty((batch_size,) + self.observation_shape, dtype=torch.uint8, device=self.device)
             dones = torch.empty(batch_size, dtype=torch.bool, device=self.device)
             weights = torch.empty(batch_size, dtype=torch.float32, device=self.device)
@@ -102,7 +96,7 @@ class PrioritizedBuffer:
         else:
             states = np.empty((batch_size,) + self.observation_shape, dtype=np.uint8)
             actions = np.empty(batch_size, dtype=np.uint8)
-            rewards = np.empty((batch_size, self.n_step_returns), dtype=np.float32)
+            rewards = np.empty(batch_size, dtype=np.float32)
             n_next_states = np.empty((batch_size,) + self.observation_shape, dtype=np.uint8)
             dones = np.empty(batch_size, dtype=bool)
             weights = np.empty(batch_size, dtype=np.float32)
@@ -122,7 +116,10 @@ class PrioritizedBuffer:
             sample_priority = random.random() * batch_range + i * batch_range
 
             # sample from the tree
-            idx, priority = self.tree.sample(sample_priority)
+            tree_idx, priority = self.tree.sample(sample_priority)
+
+            # get the corresponding index for the memory
+            idx = self.tree_idx_to_idx(tree_idx)
 
             # calculate the weight
             # w_j = (N* P(j))⁻beta  /max weight
@@ -130,45 +127,25 @@ class PrioritizedBuffer:
 
             weights[i] = weight
             indices[i] = idx
-            # states[i], actions[i], rewards[i, 0], dones[i] = self.memory[idx]
-            states[i], actions[i], rewards[i, 0], dones[i] = self.get_memory(idx)
+            states[i], actions[i], rewards[i], dones[i] = self.get_memory(idx)
 
-            # n step returns
-            # first, take the next (n-1) rewards from the main memory
-            n = 1
-            while n <= self.n_step_returns:
-                mem_idx = (idx + n) % self.max_size
-
-                # if the end of the memory is reached, stop
-                if mem_idx == self.idx:
-                    break
-
-                # take the state after n steps
-                if n == self.n_step_returns:
-                    # n_next_states[i] = self.memory[mem_idx][0]
-                    n_next_states[i] = self.get_memory(mem_idx, 0)
-                else:
-                    # rewards[i, n] = self.memory[mem_idx][2]
-                    rewards[i, n] = self.get_memory(mem_idx, 2)
-
-                n += 1
-
-            # if the previous loop did not finish, take the next rewards from n-memory
-            n_mem_idx_offset = n
-            while n <= self.n_step_returns:
-                n_mem_idx = (n - n_mem_idx_offset) % self.n_max_size
-
-                # take the state after n steps
-                if n == self.n_step_returns:
-                    # n_next_states[i] = self.memory[n_mem_idx + self.n_idx_offset][0]
-                    n_next_states[i] = self.get_n_memory(n_mem_idx, 0)
-                else:
-                    # rewards[i, n] = self.memory[n_mem_idx + self.n_idx_offset][2]
-                    rewards[i, n] = self.get_n_memory(n_mem_idx, 2)
-
-                n += 1
+            # get the state in n steps
+            n_next_idx = (idx + self.n_step_returns) % self.memory_size
+            n_next_states[i] = self.get_memory(n_next_idx, experience_part=0)
 
         return (states, actions, rewards, n_next_states, dones), weights, indices
+
+    def idx_to_tree_idx(self, idx):
+        return (self.tree_idx + (idx - self.idx) % self.memory_size) % self.max_size
+
+    def tree_idx_to_idx(self, tree_idx):
+        return (self.idx + (tree_idx - self.tree_idx) % self.max_size) % self.memory_size
+
+    def add_reward(self, idx, reward):
+        if self.tensor_memory:
+            self.reward_memory[idx] += reward
+        else:
+            self.memory[idx][2] += reward
 
     def set_memory(self, idx, experience):
         if self.tensor_memory:
@@ -176,12 +153,9 @@ class PrioritizedBuffer:
         else:
             self.memory[idx] = experience
 
-    def set_n_memory(self, n_idx, experience):
-        self.set_memory(n_idx + self.n_idx_offset, experience)
-
-    def get_memory(self, idx, experience_part=-1):
+    def get_memory(self, idx, experience_part=None):
         if self.tensor_memory:
-            if experience_part == -1:
+            if experience_part is None:
                 return self.obs_memory[idx], self.action_memory[idx], self.reward_memory[idx], self.done_memory[idx]
             elif experience_part == 0:
                 return self.obs_memory[idx]
@@ -192,13 +166,10 @@ class PrioritizedBuffer:
             elif experience_part == 3:
                 return self.done_memory[idx]
         else:
-            if experience_part == -1:
+            if experience_part is None:
                 return self.memory[idx]
             else:
                 return self.memory[idx][experience_part]
-
-    def get_n_memory(self, n_idx, experience_part=-1):
-        return self.get_memory(n_idx + self.n_idx_offset, experience_part)
 
     def set_prio(self, idx, priority):
         """
@@ -207,7 +178,7 @@ class PrioritizedBuffer:
         """
 
         assert priority > 0
-        self.tree.set_priority(idx, priority ** self.alpha)
+        self.tree.set_priority(self.idx_to_tree_idx(idx), priority ** self.alpha)
 
     def save(self, file_name):
         if self.tensor_memory:

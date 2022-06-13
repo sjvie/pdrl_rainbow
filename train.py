@@ -6,23 +6,24 @@ import config
 import numpy as np
 
 
-def train_agent(agent, env, num_episodes=None, num_frames=None, conf=config.Config):
-    if num_episodes is None and num_frames is None:
-        raise ValueError("Either num_episodes or num_frames must be specified")
+def train_agent(agent, env, conf=config.Config):
+    if conf.num_episodes is None and conf.num_frames is None and conf.max_time is None:
+        raise ValueError("Either num_episodes, num_frames or max_time must be specified")
 
     total_frames = 0
 
     episode = agent.episode_counter + 1
-    if num_episodes is not None:
-        end_episode = episode + num_episodes
+    if conf.num_episodes is not None:
+        end_episode = episode + conf.num_episodes
     else:
         end_episode = None
 
     logging.info("Starting training")
     start_time = time.time()
 
-    while (end_episode is not None and episode <= end_episode) \
-            or (num_frames is not None and total_frames < num_frames):
+    while (end_episode is None or episode <= end_episode) \
+            and (conf.num_frames is None or total_frames < conf.num_frames)\
+            and (conf.max_time is None or time.time() < start_time + conf.max_time):
         state = env.reset()
         state = process_state(state)
         episode_over = False
@@ -32,7 +33,7 @@ def train_agent(agent, env, num_episodes=None, num_frames=None, conf=config.Conf
         episode_start_time = time.time()
 
         while not episode_over and episode_frames < conf.max_frames_per_episode and (
-                num_frames is None or total_frames < num_frames):
+                conf.num_frames is None or total_frames < conf.num_frames):
             total_frames += 1
             episode_frames += 1
 
@@ -87,6 +88,8 @@ def train_agent(agent, env, num_episodes=None, num_frames=None, conf=config.Conf
     seconds = t
     logging.info("Training finished")
     logging.info("Trained for {} frames in {:02d}:{:02d}:{:02.2f}".format(total_frames, hours, minutes, seconds))
+
+    agent.save(conf.agent_save_path + str(episode))
 
 
 def process_state(state):

@@ -36,6 +36,9 @@ class Config:
     # maximum amount of total frames (for training)
     num_frames = None
 
+    # maximum time to train
+    max_time = 30
+
     # paper: Memory size: 1M transitions
     replay_buffer_size = 1000000
 
@@ -80,13 +83,14 @@ class Config:
     tensor_replay_buffer = True
 
     # LOGGING
-    log_per_frames = 1000
+    log_per_frames = 100000
     log_episode_end = True
-    save_video = True
+    save_video = False
     save_video_per_episodes = 10
     save_video_folder = "vid"
-    save_agent_per_episodes = 30
+    save_agent_per_episodes = 1000
     agent_save_path = "agent/"
+    log_file = "220613_01.log"
 
     # formatting of the log messages
     log_format = "[%(levelname)s %(asctime)s]: %(message)s"
@@ -101,7 +105,7 @@ def config_benchmark():
     Config.replay_buffer_size = 100000
     Config.num_episodes = None
     Config.num_frames = 3000
-    Config.tensor_replay_buffer = False
+    Config.tensor_replay_buffer = True
     torch.manual_seed(0)
     random.seed(0)
     np.random.seed(0)

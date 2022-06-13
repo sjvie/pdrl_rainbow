@@ -1,6 +1,7 @@
 import math
+import pickle
+from pathlib import Path
 
-import numpy as np
 import torch
 from config import Config
 from model import Model
@@ -8,22 +9,26 @@ from replay_buffer import PrioritizedBuffer
 import copy
 
 device = torch.device(Config.device if torch.cuda.is_available() else "cpu")
+torch.autograd.set_detect_anomaly(True)
 
 
 class Agent:
 
     def __init__(self, observation_shape, conv_channels, action_space, num_atoms, v_min, v_max, discount_factor,
-                 batch_size, n_step_returns):
+                 batch_size, n_step_returns, tensor_replay_buffer):
         self.action_space = action_space
         self.batch_size = batch_size
         self.num_atoms = num_atoms
         self.v_min = v_min
         self.v_max = v_max
         self.z_delta = (v_max - v_min) / (num_atoms - 1)
-        self.z_support = torch.arange(self.v_min, self.v_max + self.z_delta / 2, self.z_delta).to(device)
-        self.index_offset = (torch.arange(0, self.batch_size, 1 / self.num_atoms).long() * self.num_atoms).to(device)
+        self.z_support = torch.arange(self.v_min, self.v_max + self.z_delta / 2, self.z_delta, device=device)
+        self.index_offset = torch.arange(0, self.batch_size, 1 / self.num_atoms, device=device).long() * self.num_atoms
         self.n_step_returns = n_step_returns
         self.discount_factor = discount_factor
+        self.discount_factor_k = torch.zeros(self.n_step_returns, dtype=torch.float32, device=device)
+        for j in range(self.n_step_returns):
+            self.discount_factor_k[j] = self.discount_factor ** j
 
         self.online_model = Model(conv_channels, action_space, num_atoms, device)
         self.target_model = copy.deepcopy(self.online_model)
@@ -33,29 +38,45 @@ class Agent:
 
         # todo: linearly increase beta up to Config.replay_buffer_end
         self.replay_buffer_beta = Config.replay_buffer_beta_start
+        self.tensor_replay_buffer = tensor_replay_buffer
         self.replay_buffer = PrioritizedBuffer(Config.replay_buffer_size,
                                                observation_shape,
                                                n_step_returns,
                                                Config.replay_buffer_alpha,
-                                               self.replay_buffer_beta)
+                                               self.replay_buffer_beta,
+                                               device=device,
+                                               tensor_memory=tensor_replay_buffer)
+
+        self.episode_counter = 0
+        self.training_counter = 0
+
+    def next_episode(self):
+        self.episode_counter += 1
 
     def update_target_model(self):
         self.target_model.load_state_dict(self.online_model.state_dict())
 
     def step(self, state, action, reward, done):
+        if self.tensor_replay_buffer:
+            state = torch.Tensor(state).to(device)
+
         self.replay_buffer.add(state, action, reward, done)
 
     def train(self):
         batch, weights, idxs = self.replay_buffer.get_batch(self.batch_size)
         states, actions, rewards, n_next_states, dones = batch
 
-        # convert to tensors
-        states = torch.Tensor(states).to(device)
-        actions = torch.Tensor(actions).to(device).long()
-        rewards = torch.Tensor(rewards).to(device)
-        n_next_states = torch.Tensor(n_next_states).to(device)
-        dones = torch.Tensor(dones).to(device).long()
-        weights = torch.Tensor(weights).to(device)
+        if not self.tensor_replay_buffer:
+            # convert to tensors
+            states = torch.Tensor(states).to(device)
+            actions = torch.Tensor(actions).to(device).long()
+            rewards = torch.Tensor(rewards).to(device)
+            n_next_states = torch.Tensor(n_next_states).to(device)
+            dones = torch.Tensor(dones).to(device).long()
+            weights = torch.Tensor(weights).to(device)
+        else:
+            actions = actions.long()
+            dones = dones.long()
 
         states = states / 255.0
         n_next_states = n_next_states / 255.0
@@ -69,7 +90,6 @@ class Agent:
         log_q_dist_a = log_q_dist[range(self.batch_size), actions]
 
         with torch.no_grad():
-
             # non-logarithmic output of online model for n next states
             q_online = self.online_model(n_next_states)
 
@@ -87,10 +107,12 @@ class Agent:
             next_dist = q_target[range(self.batch_size), a_star]
 
             # calculate n step return
-            G = torch.zeros(self.batch_size, dtype=torch.float32).to(device)
-            for i in range(self.batch_size):
-                for j in range(self.n_step_returns):
-                    G[i] += rewards[i][j] * self.discount_factor ** j
+            # G = torch.zeros(self.batch_size, dtype=torch.float32).to(device)
+            # for i in range(self.batch_size):
+            #     for j in range(self.n_step_returns):
+            #         G[i] += rewards[i][j] * self.discount_factor ** j
+
+            G = torch.sum(rewards * self.discount_factor_k, -1)
 
             # Tz = r + gamma*(1-done)*z
             T_z = G.unsqueeze(-1) + torch.outer(self.discount_factor ** self.n_step_returns * (1 - dones),
@@ -107,8 +129,8 @@ class Agent:
             u = bj.ceil().long()
 
             # values to be added at the l and u indices
-            u_add = (u - bj) * next_dist
-            l_add = (bj - l) * next_dist
+            l_add = (u - bj) * next_dist
+            u_add = (bj - l) * next_dist
 
             # values to be added at the indices where l == u == bj
             # todo: is this needed? It does not seem to be a part of the algorithm in the dist paper
@@ -140,7 +162,7 @@ class Agent:
 
         # update the priorities in the replay buffer
         for i in range(self.batch_size):
-            self.replay_buffer.set_prio(idxs[i], loss[i])
+            self.replay_buffer.set_prio(idxs[i].item(), loss[i].item())
 
         # weight loss using weights from the replay buffer
         loss = loss * weights
@@ -151,6 +173,8 @@ class Agent:
         self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()
+
+        self.training_counter += 1
         return loss
 
     def select_action(self, np_state):
@@ -175,3 +199,16 @@ class Agent:
 
         # return the index of the action
         return action_index.item()
+
+    def save(self, path):
+        Path(path).mkdir(parents=True, exist_ok=True)
+        with open(path + "/replay.pickle", "wb") as f:
+            pickle.dump(self.replay_buffer, f)
+        torch.save(self.online_model.state_dict(), path + "/online.pt")
+        torch.save(self.target_model.state_dict(), path + "/target.pt")
+
+    def load(self, path):
+        with open(path + "/replay.pickle", "rb") as f:
+            self.replay_buffer = pickle.load(f)
+        self.online_model.load_state_dict(torch.load(path + "/online.pt"))
+        self.target_model.load_state_dict(torch.load(path + "/target.pt"))

@@ -1,5 +1,4 @@
 import math
-import cupy as np
 import torch.nn as nn
 import torch
 
@@ -86,13 +85,11 @@ class NoisyLinear(nn.Module):
         self.device = device
         self.sigma_zero = sigma_zero
 
-        self.v_eps_function = np.vectorize(self.eps_function)
+        self.lin_weights = nn.Parameter(torch.empty((output_dim, input_dim), dtype=torch.float32, device=device))
+        self.noisy_weights = nn.Parameter(torch.empty((output_dim, input_dim), dtype=torch.float32, device=device))
 
-        self.lin_weights = nn.Parameter(torch.Tensor(output_dim, input_dim).to(device))
-        self.noisy_weights = nn.Parameter(torch.Tensor(output_dim, input_dim).to(device))
-
-        self.lin_bias = nn.Parameter(torch.Tensor(output_dim).to(device))
-        self.noisy_bias = nn.Parameter(torch.Tensor(output_dim).to(device))
+        self.lin_bias = nn.Parameter(torch.empty(output_dim, dtype=torch.float32, device=device))
+        self.noisy_bias = nn.Parameter(torch.empty(output_dim, dtype=torch.float32, device=device))
 
         # initialize the weights and bias according to section 3.2 in the noisy net paper
         # init linear weights and bias from an independent uniform distribution U[-1/sqrt(p), 1/sqrt(p)]
@@ -138,11 +135,13 @@ class NoisyLinear(nn.Module):
         """
 
         # get first random vector and apply function
-        e_i = torch.randn(self.input_dim).to(self.device)
+        e_i = torch.empty(self.input_dim, device=self.device)
+        e_i.normal_()
         e_i = self.eps_function(e_i)
 
         # get second random vector and apply function
-        e_j = torch.randn(self.output_dim).to(self.device)
+        e_j = torch.empty(self.output_dim, device=self.device)
+        e_j.normal_()
         e_j = self.eps_function(e_j)
 
         # combine vectors to get the epsilon matrix

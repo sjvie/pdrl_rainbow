@@ -1,10 +1,9 @@
+import random
 import numpy as np
+import torch
 
 
 class Config:
-
-    conv = True
-    observation_dt = np.uint8
 
     # paper: Adam learning rate: 0.0000625
     adam_learning_rate = 0.0000625
@@ -33,6 +32,9 @@ class Config:
     # todo
     # paper: ?
     num_episodes = 10000
+
+    # maximum amount of total frames (for training)
+    num_frames = None
 
     # paper: Memory size: 1M transitions
     replay_buffer_size = 1000000
@@ -74,6 +76,33 @@ class Config:
     # GPU Device
     device = "cuda:0"
 
+    # Whether to store the replay buffer as torch tensors (as opposed to numpy arrays)
+    tensor_replay_buffer = True
+
     # LOGGING
     log_per_frames = 1000
     log_episode_end = True
+    save_video = True
+    save_video_per_episodes = 10
+    save_video_folder = "vid"
+    save_agent_per_episodes = 30
+    agent_save_path = "agent/"
+
+    # formatting of the log messages
+    log_format = "[%(levelname)s %(asctime)s]: %(message)s"
+    log_datefmt = "%y-%m-%d %H:%M:%S"
+
+
+def config_benchmark():
+    Config.log_per_frames = 1000000
+    Config.log_episode_end = True
+    Config.save_video = False
+    Config.start_learning_after = 100
+    Config.replay_buffer_size = 100000
+    Config.num_episodes = None
+    Config.num_frames = 3000
+    Config.tensor_replay_buffer = False
+    torch.manual_seed(0)
+    random.seed(0)
+    np.random.seed(0)
+

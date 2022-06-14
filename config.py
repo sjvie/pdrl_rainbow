@@ -105,7 +105,9 @@ def config_benchmark():
     Config.replay_buffer_size = 100000
     Config.num_episodes = None
     Config.num_frames = 3000
+    Config.max_time = None
     Config.tensor_replay_buffer = True
+    Config.log_file = None
     torch.manual_seed(0)
     random.seed(0)
     np.random.seed(0)

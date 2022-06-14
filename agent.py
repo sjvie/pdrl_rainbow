@@ -9,7 +9,6 @@ from replay_buffer import PrioritizedBuffer
 import copy
 
 device = torch.device(Config.device if torch.cuda.is_available() else "cpu")
-torch.autograd.set_detect_anomaly(True)
 
 
 class Agent:
@@ -147,11 +146,6 @@ class Agent:
             #           .expand(self.batch_size, self.num_atoms)
             #           .to(device)
             #           )
-
-        # get approximating distribution of the model (target and online model)
-        # calculate target distribution (n step returns)
-        # project target distribution onto same support as other distribution
-        # get Kullbeck-Leibler divergence of target distribution and the approximating distribution
 
         # get Kullbeck-Leibler divergence of target and approximating distribution
         # the KL divergence calculation has some issues as parts of m can be 0.

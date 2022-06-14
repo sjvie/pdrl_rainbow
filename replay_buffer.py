@@ -212,9 +212,9 @@ class SumMinMaxTree:
         self.array_size = get_next_power_of_2(self.capacity)
         if tensor_memory:
             assert device is not None
-            self.sum_array = torch.zeros(self.array_size * 2 - 1, dtype=torch.float32).to(device)
-            self.min_array = torch.full((self.array_size * 2 - 1,), torch.inf, dtype=torch.float32).to(device)
-            self.max_array = torch.zeros(self.array_size * 2 - 1, dtype=torch.float32).to(device)
+            self.sum_array = torch.zeros(self.array_size * 2 - 1, dtype=torch.float32, device=self.device)
+            self.min_array = torch.full((self.array_size * 2 - 1,), torch.inf, dtype=torch.float32, device=self.device)
+            self.max_array = torch.zeros(self.array_size * 2 - 1, dtype=torch.float32, device=self.device)
         else:
             # todo: possible memory optimization (if needed) -> maybe float16
             self.sum_array = np.zeros(self.array_size * 2 - 1, dtype=np.float32)
@@ -276,9 +276,9 @@ class SumMinMaxTree:
     def clear(self):
         if self.tensor_memory:
             assert self.device is not None
-            self.sum_array = torch.zeros(self.array_size * 2 - 1, dtype=torch.float32).to(self.device)
-            self.min_array = torch.full((self.array_size * 2 - 1,), torch.inf, dtype=torch.float32).to(self.device)
-            self.max_array = torch.zeros(self.array_size * 2 - 1, dtype=torch.float32).to(self.device)
+            self.sum_array = torch.zeros(self.array_size * 2 - 1, dtype=torch.float32, device=self.device)
+            self.min_array = torch.full((self.array_size * 2 - 1,), torch.inf, dtype=torch.float32, device=self.device)
+            self.max_array = torch.zeros(self.array_size * 2 - 1, dtype=torch.float32, device=self.device)
         else:
             # todo: possible memory optimization (if needed) -> maybe float16
             self.sum_array = np.zeros(self.array_size * 2 - 1, dtype=np.float32)

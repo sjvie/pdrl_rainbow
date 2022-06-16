@@ -4,9 +4,10 @@ import time
 import config
 
 import numpy as np
-
+import wandb
 
 def train_agent(agent, env, conf=config.Config):
+
     if conf.num_episodes is None and conf.num_frames is None and conf.max_time is None:
         raise ValueError("Either num_episodes, num_frames or max_time must be specified")
 
@@ -17,13 +18,14 @@ def train_agent(agent, env, conf=config.Config):
         end_episode = episode + conf.num_episodes
     else:
         end_episode = None
-
     logging.info("Starting training")
     start_time = time.time()
-
-    while (end_episode is None or episode <= end_episode) \
+    agent.run.watch(agent.online_model,log='all')
+    """while (end_episode is None or episode <= end_episode) \
             and (conf.num_frames is None or total_frames < conf.num_frames)\
-            and (conf.max_time is None or time.time() < start_time + conf.max_time):
+            and (conf.max_time is None or time.time() < start_time + conf.max_time):"""
+    while(True):
+
         state = env.reset()
         state = process_state(state)
         episode_over = False
@@ -38,6 +40,9 @@ def train_agent(agent, env, conf=config.Config):
             episode_frames += 1
 
             action = agent.select_action(state)
+
+            agent.run.log({"action": action})
+
             next_state, reward, done, _ = env.step(action)
             next_state = process_state(next_state)
             reward = np.clip(reward, -1, 1)
@@ -62,7 +67,7 @@ def train_agent(agent, env, conf=config.Config):
                                                                                         total_frames,
                                                                                         episode_reward / episode_frames,
                                                                                         episode_loss / episode_frames))
-
+        agent.run.log({"episode_reward":episode_reward})
         episode_end_time = time.time()
         if conf.log_episode_end:
             fps = episode_frames / (episode_end_time - episode_start_time)

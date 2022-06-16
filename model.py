@@ -12,7 +12,6 @@ class Model(nn.Module):
         :param num_atoms (int): the amount of atoms for the probability distribution of each action
         """
         super().__init__()
-
         self.action_space = action_space
         self.num_atoms = num_atoms
 

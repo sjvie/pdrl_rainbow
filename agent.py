@@ -3,6 +3,8 @@ import pickle
 from pathlib import Path
 
 import torch
+import wandb
+
 from config import Config
 from model import Model
 from replay_buffer import PrioritizedBuffer
@@ -47,6 +49,16 @@ class Agent:
 
         self.episode_counter = 0
         self.training_counter = 0
+
+        # initializing Loging over Weights and Biases
+        self.run = wandb.init(project="pdrl", entity="gdlktemo")
+        wandb.config ={
+            "learning_rate" : Config.adam_learning_rate,
+            "max_episodes": Config.num_episodes,
+            "discount_factor": Config.discount_factor,
+            "noisy_net_sigma": Config.noisy_sigma_zero,
+            "multistep n": Config.multi_step_n
+        }
 
     def next_episode(self):
         self.episode_counter += 1
@@ -152,17 +164,20 @@ class Agent:
         # this makes the log(m) = -inf and loss = nan
         # loss = torch.sum(m * torch.log(m) - m * log_q_dist, dim=-1) # KL divergence
         loss = - torch.sum(m * log_q_dist_a, dim=-1)  # cross entropy
-
+        data = [[s] for s in loss]
+        table = wandb.Table(data=data, columns=["loss"])
+        self.run.log({"loss_prior_weights":wandb.plot.histogram(table,"loss",title="loss before weights")})
         # update the priorities in the replay buffer
         for i in range(self.batch_size):
             self.replay_buffer.set_prio(idxs[i].item(), loss[i].item())
-
+            self.run.log({"priorities":loss[i].item()})
+        #TODO: wird der loss mit dem weight multipliziert, nachdem die replaybuffer experiences geupdatet werden?
         # weight loss using weights from the replay buffer
         loss = loss * weights
 
         # use the average loss of the batch
         loss = loss.mean()
-
+        self.run.log({"mean_loss_over_time":loss})
         self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()
@@ -186,8 +201,8 @@ class Agent:
             # get expected Q values
             Q_dist = Q_dist * self.z_support
             Q = Q_dist.sum(dim=1)
-
             # get action_index with maximum Q value
+
             action_index = torch.argmax(Q)
 
         # return the index of the action

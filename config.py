@@ -31,7 +31,7 @@ class Config:
 
     # todo
     # paper: ?
-    num_episodes = 10000
+    num_episodes = 1000000
 
     # maximum amount of total frames (for training)
     num_frames = None
@@ -46,7 +46,7 @@ class Config:
     replay_period = 4
 
     # paper: Min history to start learning: 80K frames
-    start_learning_after = 80000
+    start_learning_after = 8000
 
     # paper: Max frames per episode: 108K
     max_frames_per_episode = 108000

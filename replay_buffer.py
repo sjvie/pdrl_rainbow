@@ -23,6 +23,8 @@ class PrioritizedBuffer:
         self.tensor_memory = tensor_memory
         self.max_size = size
         self.current_size = 0
+        self.annealing_steps =1000000
+        self.delta_beta= (1.0-self.beta)/self.annealing_steps
 
         self.memory_size = size + n_step_returns
         if self.tensor_memory:
@@ -76,6 +78,10 @@ class PrioritizedBuffer:
         # increase size until max_size is reached
         if self.current_size < self.memory_size:
             self.current_size += 1
+        if self.beta <= 1.0:
+            self.beta+=self.delta_beta
+            if self.beta >1.0:
+                self.beta = 1.0
 
     def get_batch(self, batch_size=32):
         """

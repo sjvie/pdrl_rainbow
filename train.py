@@ -103,6 +103,14 @@ def train_agent(agent, env, conf=Config):
                                                                                                                                    action_list[1],
                                                                                                                                   action_list[2])
                 )
+            if(agent.action_space==4):
+                logging.info(
+                    '[AVERAGE] | Avg. reward: {:.2f} | Actiondistribution 0: {:.2f} 1: {:.2f} 2: {:.2f} 3: {:.2f}'.format(reward_list.mean(),
+                                                                                                                            action_list[0],
+                                                                                                                            action_list[1],
+                                                                                                                            action_list[2],
+                                                                                                                            action_list[3])
+                )
             action_list = np.zeros(agent.action_space)
         if episode % conf.save_agent_per_episodes == 0 and episode > 0:
             agent.save(conf.agent_save_path + str(episode))

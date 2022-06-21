@@ -18,8 +18,9 @@ def main():
     # config.config_benchmark()
     env, observation_shape, action_space = pong()
     # TODO: what about action repetitions?
-
-    logging.debug("Cuda available: %s" % torch.cuda.is_available())
+    env.unwrapped.get_action_meanings()
+    logging.info("Cuda available: %s" % torch.cuda.is_available())
+    logging.info("actionspace: %s" %action_space)
 
     agent = Agent(observation_shape,
                   Config.frame_stack,
@@ -43,7 +44,7 @@ def main():
 
 
 def pong():
-    env = gym.make("ALE/Pong-v5", obs_type="grayscale")
+    env = gym.make("ALE/Freeway-v5", obs_type="grayscale",full_action_space=False,repeat_action_probability=0.0)
     env = gym.wrappers.ResizeObservation(env, (Config.observation_width, Config.observation_height))
     env = gym.wrappers.FrameStack(env, Config.frame_stack)
     if Config.save_video:

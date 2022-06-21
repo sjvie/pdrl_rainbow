@@ -13,6 +13,7 @@ def train_agent(agent, env, conf=Config):
 
     total_frames = 0
     action_list=np.zeros(agent.action_space,dtype=np.int8)
+    reward_list=np.zeros(500,dtype=np.int8)
     episode = agent.episode_counter + 1
     if conf.num_episodes is not None:
         end_episode = episode + conf.num_episodes
@@ -40,7 +41,7 @@ def train_agent(agent, env, conf=Config):
             episode_frames += 1
 
             action = agent.select_action(state)
-            #action_list[action]+=1
+            action_list[action]+=1
 
 
             next_state, reward, done, _ = env.step(action)
@@ -74,17 +75,35 @@ def train_agent(agent, env, conf=Config):
                                                                                         episode_reward / episode_frames,
                                                                                         episode_loss / episode_frames))
         agent.run.log({"episode_reward":episode_reward})
+        reward_list[episode%500]=episode_reward
         episode_end_time = time.time()
         if conf.log_episode_end:
             fps = episode_frames / (episode_end_time - episode_start_time)
             logging.info(
-                '[EPISODE END] E/ef/tf: {}/{}/{} | fps: {:.2f} | Avg. reward: {:.3f} | Avg loss: {:.3f}'.format(episode,
+                '[EPISODE END] E/ef/tf: {}/{}/{} | fps: {:.2f} | Avg. reward: {:.3f} | Avg loss: {:.5f}'.format(episode,
                                                                                                                 episode_frames,
                                                                                                                 total_frames,
                                                                                                                 fps,
-                                                                                                                episode_reward / episode_frames,
-                                                                                                                episode_loss / episode_frames))
-
+                                                                                                                episode_reward,
+                                                                                                                episode_loss))
+        if episode % 100:
+            if(agent.action_space==6):
+                logging.info(
+                    '[AVERAGE] | Avg. reward: {:.2f} | Actiondistribution 0: {:.2f} 1: {:.2f} 2: {:.2f} 3: {:.2f} 4:{:.2f} 5:{:.2f}'.format(reward_list.mean(),
+                                                                                                                                            action_list[0]/action_list.sum(),
+                                                                                                                                            action_list[1]/action_list.sum(),
+                                                                                                                                            action_list[2]/action_list.sum(),
+                                                                                                                                            action_list[3]/action_list.sum(),
+                                                                                                                                            action_list[4]/action_list.sum(),
+                                                                                                                                            action_list[5]/action_list.sum())
+                )
+            if(agent.action_space==3):
+                logging.info(
+                    '[AVERAGE] | Avg. reward: {:.2f} | Actiondistribution 0: {:.2f} 1: {:.2f} 2: {:.2f}'.format(reward_list.mean(),
+                                                                                                                                            action_list[0]/action_list.sum(),
+                                                                                                                                            action_list[1]/action_list.sum(),
+                                                                                                                                            action_list[2]/action_list.sum())
+                )
         if episode % conf.save_agent_per_episodes == 0 and episode > 0:
             agent.save(conf.agent_save_path + str(episode))
 

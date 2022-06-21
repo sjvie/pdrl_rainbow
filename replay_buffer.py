@@ -6,12 +6,15 @@ import torch
 
 class PrioritizedBuffer:
     def __init__(self, size, observation_shape, n_step_returns, alpha, beta, device, discount_factor,
-                 tensor_memory=False):
+                 tensor_memory=False,per=True,multistep=True):
         """
         :param size (int): size of the replay buffer
         :param observation_space (int): size of the observations
         :param alpha (float): hyperparameter. Exponent of the priorities
         :param beta (float): hyperparameter. Exponent used in calculating the weights
+        :param per (bool): Variable to determine if the Prioritized Replay Buffer should be used.
+        :param multistep (bool): Variable to determine if the multistep-return should be used.
+
         """
 
         self.observation_shape = observation_shape
@@ -25,8 +28,12 @@ class PrioritizedBuffer:
         self.current_size = 0
         self.annealing_steps =1000000
         self.delta_beta= (1.0-self.beta)/self.annealing_steps
+        self.per = per
+        self.multistep = multistep
+        self.memory_size = size
+        if self.multistep:
+            self.memory_size = size + n_step_returns
 
-        self.memory_size = size + n_step_returns
         if self.tensor_memory:
             self.obs_memory = torch.zeros((self.memory_size,) + observation_shape, dtype=torch.uint8,
                                           device=self.device)
@@ -37,10 +44,10 @@ class PrioritizedBuffer:
             dt = np.dtype(
                 [("obs", np.uint8, observation_shape), ("action", np.uint8), ("reward", np.float32), ("done", bool)])
             self.memory = np.zeros(self.memory_size, dt)
-
-        self.tree = SumMinMaxTree(size, tensor_memory=False, device=device)
+        if(self.per):
+            self.tree = SumMinMaxTree(size, tensor_memory=False, device=device)
+            self.tree_idx = 0
         self.idx = 0
-        self.tree_idx = 0
 
     def add(self, state, action, reward, done):
         """ Add new experience to the buffer
@@ -53,35 +60,36 @@ class PrioritizedBuffer:
         """
 
         self.set_memory(self.idx, (state, action, reward, done))
+        if self.per:
+            if self.current_size >= self.n_step_returns:
+                # set the priority of the new experience
+                if self.current_size == self.n_step_returns:
+                    # when the buffer is empty, just use value 1.0
+                    max_priority = 1.0
+                else:
+                    # take the max priority of all experiences
+                    max_priority = self.tree.max()
 
-        if self.current_size >= self.n_step_returns:
-            # set the priority of the new experience
-            if self.current_size == self.n_step_returns:
-                # when the buffer is empty, just use value 1.0
-                max_priority = 1.0
-            else:
-                # take the max priority of all experiences
-                max_priority = self.tree.max()
-
-            # add the experience to the tree
-            self.tree.add(self.tree_idx, max_priority)
-            self.tree_idx = (self.tree_idx + 1) % self.max_size
+                # add the experience to the tree
+                self.tree.add(self.tree_idx, max_priority)
+                self.tree_idx = (self.tree_idx + 1) % self.max_size
 
         # add to the rewards of the last n experiences
-        for i in range(1, self.n_step_returns):
-            r_idx = (self.idx - i) % self.memory_size
-            self.add_reward(r_idx, reward * self.discount_factor ** i)
+        if self.multistep:
+            for i in range(1, self.n_step_returns):
+                r_idx = (self.idx - i) % self.memory_size
+                self.add_reward(r_idx, reward * self.discount_factor ** i)
 
         # move index by one
         self.idx = (self.idx + 1) % self.memory_size
-
-        # increase size until max_size is reached
-        if self.current_size < self.memory_size:
-            self.current_size += 1
-        if self.beta <= 1.0:
-            self.beta+=self.delta_beta
-            if self.beta >1.0:
-                self.beta = 1.0
+        if self.per:
+            # increase size until max_size is reached
+            if self.current_size < self.memory_size:
+                self.current_size += 1
+            if self.beta <= 1.0:
+                self.beta+=self.delta_beta
+                if self.beta >1.0:
+                    self.beta = 1.0
 
     def get_batch(self, batch_size=32):
         """
@@ -108,30 +116,36 @@ class PrioritizedBuffer:
             weights = np.empty(batch_size, dtype=np.float32)
             indices = np.empty(batch_size, dtype=np.uint32)
 
-        # get total sum of priorities
-        treesum = self.tree.sum()
+        if self.per:
+            # get total sum of priorities
+            treesum = self.tree.sum()
 
-        # the range from which each experience is sampled
-        batch_range = treesum / batch_size
+            # the range from which each experience is sampled
+            batch_range = treesum / batch_size
 
-        # get the max weight using the minimum priority
-        max_weight = ((1 / self.current_size) * (1 / self.tree.min())) ** self.beta
+            # get the max weight using the minimum priority
+            max_weight = ((1 / self.current_size) * (1 / self.tree.min())) ** self.beta
 
         for i in range(batch_size):
-            # get the random priority to sample from the tree
-            sample_priority = random.random() * batch_range + i * batch_range
+            if self.per:
+                # get the random priority to sample from the tree
+                sample_priority = random.random() * batch_range + i * batch_range
 
-            # sample from the tree
-            tree_idx, priority = self.tree.sample(sample_priority)
+                # sample from the tree
+                tree_idx, priority = self.tree.sample(sample_priority)
 
-            # get the corresponding index for the memory
-            idx = self.tree_idx_to_idx(tree_idx)
+                # get the corresponding index for the memory
+                idx = self.tree_idx_to_idx(tree_idx)
 
-            # calculate the weight
-            # w_j = (N* P(j))⁻beta  /max weight
-            weight = ((self.current_size * priority) ** -self.beta) / max_weight
+                # calculate the weight
+                # w_j = (N* P(j))⁻beta  /max weight
+                weight = ((self.current_size * priority) ** -self.beta) / max_weight
 
-            weights[i] = weight
+                weights[i] = weight
+            else:
+                idx = random.randint(0,self.memory_size-1-self.n_step_returns)
+                weights[i] = 1
+
             indices[i] = idx
             states[i], actions[i], rewards[i], dones[i] = self.get_memory(idx)
 

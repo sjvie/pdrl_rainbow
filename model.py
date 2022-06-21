@@ -5,7 +5,7 @@ import torch
 
 class Model(nn.Module):
 
-    def __init__(self, conv_channels, action_space, num_atoms, device):
+    def __init__(self, conv_channels, action_space, num_atoms, device, distributed=True, noisy=True):
         """
         :param input_dim (int): the length of the input vector
         :param action_space (int): the amount of actions
@@ -14,6 +14,8 @@ class Model(nn.Module):
         super().__init__()
         self.action_space = action_space
         self.num_atoms = num_atoms
+        self.distributed = distributed
+        self.noisy = noisy
 
         self.softmax = nn.Softmax(dim=1)
         self.log_softmax = nn.LogSoftmax(dim=1)
@@ -27,24 +29,69 @@ class Model(nn.Module):
         sigma_zero = 0.5
 
         # the size of the output of the convolutional layer
-        # 64 * 7 * 7
+        # 64 * 7 * 7 TODO: checken ob das richtig ist
         self.conv_output_size = 3136
+        if self.distributed:
+            if self.noisy:
+                self.value = nn.Sequential(
+                    NoisyLinear(input_dim=self.conv_output_size, output_dim=512, sigma_zero=sigma_zero, device=device),
+                    nn.ReLU(),
+                    NoisyLinear(input_dim=512, output_dim=num_atoms, sigma_zero=sigma_zero, device=device),
+                    # nn.Linear(in_channels=64, out_channels=512), nn.ReLU(),
+                    # nn.Linear(512, 1)
+                )
 
-        self.value = nn.Sequential(
-            NoisyLinear(input_dim=self.conv_output_size, output_dim=512, sigma_zero=sigma_zero, device=device),
-            nn.ReLU(),
-            NoisyLinear(input_dim=512, output_dim=num_atoms, sigma_zero=sigma_zero, device=device),
-            # nn.Linear(in_channels=64, out_channels=512), nn.ReLU(),
-            # nn.Linear(512, 1)
-        )
+                self.advantage = nn.Sequential(
+                    NoisyLinear(input_dim=self.conv_output_size, output_dim=512, sigma_zero=sigma_zero, device=device),
+                    nn.ReLU(),
+                    NoisyLinear(input_dim=512, output_dim=action_space * num_atoms, sigma_zero=sigma_zero, device=device),
+                    # nn.Linear(in_channels=64, out_channels=512), nn.ReLU(),
+                    # nn.Linear(512, action_space)
+                )
+            else:
+                self.value = nn.Sequential(
+                    nn.Linear(self.conv_output_size, 512, sigma_zero, device=device),
+                    nn.ReLU(),
+                    nn.Linear(512, num_atoms, device=device)
+                )
+                self.advantage = nn.Sequential(
+                    nn.Linear(self.conv_output_size, 512, device=device),
+                    nn.ReLU(),
+                    nn.Linear(512, action_space * num_atoms, device=device)
+                )
+        else:
+            if self.noisy:
+                self.value = nn.Sequential(
+                    NoisyLinear(input_dim=self.conv_output_size, output_dim=512, sigma_zero=sigma_zero, device=device),
+                    nn.ReLU(),
+                    NoisyLinear(input_dim=512, output_dim=1, sigma_zero=sigma_zero, device=device),
+                    # nn.Linear(in_channels=64, out_channels=512), nn.ReLU(),
+                    # nn.Linear(512, 1)
+                )
 
-        self.advantage = nn.Sequential(
-            NoisyLinear(input_dim=self.conv_output_size, output_dim=512, sigma_zero=sigma_zero, device=device),
-            nn.ReLU(),
-            NoisyLinear(input_dim=512, output_dim=action_space * num_atoms, sigma_zero=sigma_zero, device=device),
-            # nn.Linear(in_channels=64, out_channels=512), nn.ReLU(),
-            # nn.Linear(512, action_space)
-        )
+                self.advantage = nn.Sequential(
+                    NoisyLinear(input_dim=self.conv_output_size, output_dim=512, sigma_zero=sigma_zero, device=device),
+                    nn.ReLU(),
+                    NoisyLinear(input_dim=512, output_dim=action_space, sigma_zero=sigma_zero, device=device),
+                    # nn.Linear(in_channels=64, out_channels=512), nn.ReLU(),
+                    # nn.Linear(512, action_space)
+                )
+            else:
+                self.value = nn.Sequential(
+                    nn.Linear(self.conv_output_size, 512, device=device),
+                    nn.ReLU(),
+                    nn.Linear(512, 1, device=device)
+                )
+                self.advantage = nn.Sequential(
+                    nn.Linear(self.conv_output_size, 512, device=device),
+                    nn.ReLU(),
+                    nn.Linear(512, action_space, device=device)
+                )
+
+
+
+
+
 
     def forward(self, x, log=False):
         """
@@ -61,19 +108,24 @@ class Model(nn.Module):
 
         # value stream (linear layers)
         advantage = self.advantage(c)
+        #duelling + distributed case
+        if self.distributed:
+            # convert one dimensional tensor to two dimensions
+            advantage = advantage.view(-1, self.action_space, self.num_atoms)
 
-        # convert one dimensional tensor to two dimensions
-        advantage = advantage.view(-1, self.action_space, self.num_atoms)
+            # combine value and advantage stream
+            Q_dist = value.unsqueeze(dim=-2) + advantage - advantage.mean(dim=-1, keepdim=True)
+            Q_dist = Q_dist.squeeze()
 
-        # combine value and advantage stream
-        Q_dist = value.unsqueeze(dim=-2) + advantage - advantage.mean(dim=-1, keepdim=True)
-        Q_dist = Q_dist.squeeze()
-
-        # apply softmax (with or without log)
-        if log:
-            return self.log_softmax(Q_dist)
+            # apply softmax (with or without log)
+            if log:
+                return self.log_softmax(Q_dist)
+            else:
+                return self.softmax(Q_dist)
+        #duelling case without distributed
         else:
-            return self.softmax(Q_dist)
+            q_values = value + (advantage-advantage.mean())
+            return q_values
 
 
 class NoisyLinear(nn.Module):

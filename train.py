@@ -1,18 +1,18 @@
 import logging
 import time
 
-import config
-
+#from config import Config
+from test_config import Config
 import numpy as np
 import wandb
 
-def train_agent(agent, env, conf=config.Config):
+def train_agent(agent, env, conf=Config):
 
     if conf.num_episodes is None and conf.num_frames is None and conf.max_time is None:
         raise ValueError("Either num_episodes, num_frames or max_time must be specified")
 
     total_frames = 0
-
+    action_list=np.zeros(agent.action_space,dtype=np.int8)
     episode = agent.episode_counter + 1
     if conf.num_episodes is not None:
         end_episode = episode + conf.num_episodes
@@ -40,8 +40,8 @@ def train_agent(agent, env, conf=config.Config):
             episode_frames += 1
 
             action = agent.select_action(state)
+            #action_list[action]+=1
 
-            agent.run.log({"action": action})
 
             next_state, reward, done, _ = env.step(action)
             next_state = process_state(next_state)
@@ -57,6 +57,12 @@ def train_agent(agent, env, conf=config.Config):
             if total_frames > conf.start_learning_after and total_frames % conf.target_model_period == 0:
                 agent.update_target_model()
                 logging.debug("Updated target model")
+
+            """column=[i for i in range(agent.action_space)]
+            data = [action_list]
+            table=wandb.Table(data=data,columns=column)
+            agent.run.log({"actions": table})
+            """
 
             state = next_state
             episode_over = done

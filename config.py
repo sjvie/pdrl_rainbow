@@ -31,7 +31,7 @@ class Config:
 
     # todo
     # paper: ?
-    num_episodes = 1000000
+    num_episodes = 8000000
 
     # maximum amount of total frames (for training)
     num_frames = None
@@ -58,9 +58,6 @@ class Config:
     # paper: Prioritization importance sampling beta: 0.4 -> 1.0
     replay_buffer_beta_start = 0.4
     replay_buffer_beta_end = 1.0
-
-    # paper: Multi-step returns n: 3
-    multi_step_n = 3
 
     # paper: Distributional atoms: 51
     distributional_atoms = 51
@@ -96,6 +93,22 @@ class Config:
     log_format = "[%(levelname)s %(asctime)s]: %(message)s"
     log_datefmt = "%y-%m-%d %H:%M:%S"
 
+    #set per & multistep to false if Duelling
+    #prioritized Replay
+    use_per = False
+
+    #multistep return, if False, don't forget to change multi_step_n to 1 !!!
+    use_multistep = False
+
+    # paper: Multi-step returns n: 3, if multistep not used, n = 1
+    multi_step_n = 1
+    #set noisy net experience
+    noisy = False
+    #use distributed rl
+    distributed = False
+    #if noisy is false, you must consider epsilon greedy as exploration strategy(for now)
+    epsilon = 1
+    epsilon_min = 0.01
 
 def config_benchmark():
     Config.log_per_frames = 1000000

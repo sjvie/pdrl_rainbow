@@ -1,10 +1,11 @@
 import logging
 import torch
 
-import config
+#from config import Config
+from test_config import Config
+
 import train
 from agent import Agent
-from config import Config
 import gym
 
 agent_load_path = "agent/30"
@@ -29,7 +30,13 @@ def main():
                   Config.discount_factor,
                   Config.batch_size,
                   Config.multi_step_n,
-                  Config.tensor_replay_buffer)
+                  Config.tensor_replay_buffer,
+                  Config.use_per,
+                  Config.use_multistep,
+                  Config.noisy,
+                  Config.epsilon,
+                  Config.epsilon_min,
+                  Config.distributed)
 
     # agent.load(agent_load_path)
     train.train_agent(agent, env, conf=Config)

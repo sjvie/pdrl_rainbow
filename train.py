@@ -12,7 +12,7 @@ def train_agent(agent, env, conf=Config):
         raise ValueError("Either num_episodes, num_frames or max_time must be specified")
 
     total_frames = 0
-    action_list=np.zeros(agent.action_space,dtype=np.int8)
+    action_list=np.zeros(agent.action_space)
     reward_list=np.zeros(500,dtype=np.int8)
     episode = agent.episode_counter + 1
     if conf.num_episodes is not None:
@@ -86,7 +86,7 @@ def train_agent(agent, env, conf=Config):
                                                                                                                 fps,
                                                                                                                 episode_reward,
                                                                                                                 episode_loss))
-        if episode % 100:
+        if episode % 200==0:
             if(agent.action_space==6):
                 logging.info(
                     '[AVERAGE] | Avg. reward: {:.2f} | Actiondistribution 0: {:.2f} 1: {:.2f} 2: {:.2f} 3: {:.2f} 4:{:.2f} 5:{:.2f}'.format(reward_list.mean(),
@@ -99,11 +99,11 @@ def train_agent(agent, env, conf=Config):
                 )
             if(agent.action_space==3):
                 logging.info(
-                    '[AVERAGE] | Avg. reward: {:.2f} | Actiondistribution 0: {:.2f} 1: {:.2f} 2: {:.2f}'.format(reward_list.mean(),
-                                                                                                                                            action_list[0]/action_list.sum(),
-                                                                                                                                            action_list[1]/action_list.sum(),
-                                                                                                                                            action_list[2]/action_list.sum())
+                    '[AVERAGE] | Avg. reward: {:.2f} | Actiondistribution 0: {:.2f} 1: {:.2f} 2: {:.2f}'.format(reward_list.mean(),action_list[0],
+                                                                                                                                   action_list[1],
+                                                                                                                                  action_list[2])
                 )
+            action_list = np.zeros(agent.action_space)
         if episode % conf.save_agent_per_episodes == 0 and episode > 0:
             agent.save(conf.agent_save_path + str(episode))
 

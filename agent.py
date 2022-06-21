@@ -6,8 +6,8 @@ from torch.nn import functional as F
 import torch
 import wandb
 
-from test_config import Config
-#from config import Config
+#from test_config import Config
+from config import Config
 from model import Model
 from replay_buffer import PrioritizedBuffer
 import copy

@@ -1,8 +1,8 @@
 import logging
 import torch
 
-#from config import Config
-from test_config import Config
+from config import Config
+#from test_config import Config
 
 import train
 from agent import Agent

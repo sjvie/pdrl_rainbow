@@ -1,8 +1,8 @@
 import logging
 import time
 
-#from config import Config
-from test_config import Config
+from config import Config
+#from test_config import Config
 import numpy as np
 import wandb
 

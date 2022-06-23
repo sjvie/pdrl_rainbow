@@ -75,6 +75,7 @@ def train_agent(agent, env, conf=Config):
                                                                                         episode_reward / episode_frames,
                                                                                         episode_loss / episode_frames))
         agent.run.log({"episode_reward":episode_reward})
+        agent.run.log({"exploration_rate":agent.epsilon})
         reward_list[episode%500]=episode_reward
         episode_end_time = time.time()
         if conf.log_episode_end:

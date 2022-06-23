@@ -18,7 +18,8 @@ device = torch.device(Config.device if torch.cuda.is_available() else "cpu")
 class Agent:
 
     def __init__(self, observation_shape, conv_channels, action_space, num_atoms, v_min, v_max, discount_factor,
-                 batch_size, n_step_returns, tensor_replay_buffer, use_per, use_multistep, noisy, epsilon, epsilon_min, distributed):
+                 batch_size, n_step_returns, tensor_replay_buffer, use_per, use_multistep, noisy, epsilon, epsilon_min,
+                 distributed, seed):
         self.action_space = action_space
         self.batch_size = batch_size
         self.num_atoms = num_atoms
@@ -44,6 +45,7 @@ class Agent:
         self.optimizer = torch.optim.Adam(self.online_model.parameters(),
                                           lr=Config.adam_learning_rate,
                                           eps=Config.adam_e)
+        self.seed = seed
 
         # todo: linearly increase beta up to Config.replay_buffer_end
         self.replay_buffer_beta = Config.replay_buffer_beta_start
@@ -72,6 +74,7 @@ class Agent:
             "noisy_net_sigma": Config.noisy_sigma_zero,
             "multistep n": Config.multi_step_n
         }
+        self.run.log({"seed":self.seed})
 
     def next_episode(self):
         self.episode_counter += 1

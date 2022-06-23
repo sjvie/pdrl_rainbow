@@ -7,21 +7,26 @@ from config import Config
 import train
 from agent import Agent
 import gym
-
+import cupy as np
 agent_load_path = "agent/30"
 log_file_name = "log_00.txt"
 
 
 def main():
     # todo: log stuff
+    seed = np.random.randint(0,100)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+
 
     # config.config_benchmark()
-    env, observation_shape, action_space = pong()
+    env, observation_shape, action_space = atari()
     # TODO: what about action repetitions?
-    env.unwrapped.get_action_meanings()
-    logging.info("Cuda available: %s" % torch.cuda.is_available())
-    logging.info("actionspace: %s" %action_space)
+    env.seed(seed)
 
+    logging.info("Cuda available: %s" % torch.cuda.is_available())
+    logging.info("actionspace: %s" % action_space)
+    logging.info("seed: %s" % seed)
     agent = Agent(observation_shape,
                   Config.frame_stack,
                   action_space,
@@ -37,13 +42,14 @@ def main():
                   Config.noisy,
                   Config.epsilon,
                   Config.epsilon_min,
-                  Config.distributed)
+                  Config.distributed,
+                  seed)
 
     # agent.load(agent_load_path)
     train.train_agent(agent, env, conf=Config)
 
 
-def pong():
+def atari():
     env = gym.make("ALE/Breakout-v5", obs_type="grayscale",full_action_space=False,repeat_action_probability=0.0)
     env = gym.wrappers.ResizeObservation(env, (Config.observation_width, Config.observation_height))
     env = gym.wrappers.FrameStack(env, Config.frame_stack)

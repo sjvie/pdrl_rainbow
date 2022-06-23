@@ -19,7 +19,7 @@ class Agent:
 
     def __init__(self, observation_shape, conv_channels, action_space, num_atoms, v_min, v_max, discount_factor,
                  batch_size, n_step_returns, tensor_replay_buffer, use_per, use_multistep, noisy, epsilon, epsilon_min,
-                 distributed, seed):
+                 distributed, seed, adam_learning_rate, adam_e, replay_buffer_beta_start,replay_buffer_alpha ):
         self.action_space = action_space
         self.batch_size = batch_size
         self.num_atoms = num_atoms
@@ -39,21 +39,25 @@ class Agent:
         self.annealing_steps=1000000
         #epsilon annealing over 1M steps to a minimum of 0.01
         self.delta_eps = (self.epsilon-self.epsilon_min)/self.annealing_steps
+        self.adam_learning_rate= adam_learning_rate
+        self.adam_e = adam_e
+        self.replay_buffer_beta_start = replay_buffer_beta_start
+        self.replay_buffer_alpha = replay_buffer_alpha
         self.distributed = distributed
         self.online_model = Model(conv_channels, action_space, num_atoms,noisy=self.noisy,distributed=self.distributed,device=device)
         self.target_model = copy.deepcopy(self.online_model)
         self.optimizer = torch.optim.Adam(self.online_model.parameters(),
-                                          lr=Config.adam_learning_rate,
-                                          eps=Config.adam_e)
+                                          lr=self.adam_learning_rate,
+                                          eps=self.adam_e)
         self.seed = seed
 
         # todo: linearly increase beta up to Config.replay_buffer_end
-        self.replay_buffer_beta = Config.replay_buffer_beta_start
+        self.replay_buffer_beta = self.replay_buffer_beta_start
         self.tensor_replay_buffer = tensor_replay_buffer
-        self.replay_buffer = PrioritizedBuffer(Config.replay_buffer_size,
+        self.replay_buffer = PrioritizedBuffer(self.replay_buffer_size,
                                                observation_shape,
                                                n_step_returns,
-                                               Config.replay_buffer_alpha,
+                                               self.replay_buffer_alpha,
                                                self.replay_buffer_beta,
                                                device=device,
                                                discount_factor=self.discount_factor,
@@ -67,6 +71,8 @@ class Agent:
 
         # initializing Loging over Weights and Biases
         self.run = wandb.init(project="pdrl", entity="gdlktemo")
+        #TODO: sollten wir mal ändern, da es auf der falschen config (theoretisch) läuft
+        #trotzdem kein Plan was das hier eigentlich macht
         wandb.config ={
             "learning_rate" : Config.adam_learning_rate,
             "max_episodes": Config.num_episodes,

@@ -1,7 +1,8 @@
 import logging
+import sys
+
 import torch
 
-from config import Config
 #from test_config import Config
 import random
 import train
@@ -10,9 +11,22 @@ import gym
 import cupy as np
 agent_load_path = "agent/30"
 log_file_name = "log_00.txt"
+config_settings = sys.argv[1]
+#todo: multistep configs
+if config_settings == 'duelling':
+    from configs.duelling_config import Config
 
+elif (config_settings == 'duelling_per'):
+    from configs.duelling_per_config import Config
+elif (config_settings == 'duelling_per'):
+    from configs.noisy_per_config import Config
+elif (config_settings == 'duelling_per'):
+    from configs.distributed_per_config import Config
+else:
+    from configs.rainbow_config import Config
 
 def main():
+
     # todo: log stuff
     seed = random.randint(0,100)
     np.random.seed(seed)
@@ -43,7 +57,11 @@ def main():
                   Config.epsilon,
                   Config.epsilon_min,
                   Config.distributed,
-                  seed)
+                  seed,
+                  Config.adam_learning_rate,
+                  Config.adam_e,
+                  Config.replay_buffer_beta_start,
+                  Config.replay_buffer_alpha)
 
     # agent.load(agent_load_path)
     train.train_agent(agent, env, conf=Config)

@@ -19,7 +19,7 @@ class Agent:
 
     def __init__(self, observation_shape, conv_channels, action_space, num_atoms, v_min, v_max, discount_factor,
                  batch_size, n_step_returns, tensor_replay_buffer, use_per, use_multistep, noisy, epsilon, epsilon_min,
-                 distributed, seed, adam_learning_rate, adam_e, replay_buffer_beta_start,replay_buffer_alpha ):
+                 distributed, seed, adam_learning_rate, adam_e, replay_buffer_beta_start,replay_buffer_alpha, replay_buffer_size):
         self.action_space = action_space
         self.batch_size = batch_size
         self.num_atoms = num_atoms
@@ -43,6 +43,7 @@ class Agent:
         self.adam_e = adam_e
         self.replay_buffer_beta_start = replay_buffer_beta_start
         self.replay_buffer_alpha = replay_buffer_alpha
+        self.replay_buffer_size = replay_buffer_size
         self.distributed = distributed
         self.online_model = Model(conv_channels, action_space, num_atoms,noisy=self.noisy,distributed=self.distributed,device=device)
         self.target_model = copy.deepcopy(self.online_model)

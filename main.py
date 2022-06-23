@@ -61,7 +61,8 @@ def main():
                   Config.adam_learning_rate,
                   Config.adam_e,
                   Config.replay_buffer_beta_start,
-                  Config.replay_buffer_alpha)
+                  Config.replay_buffer_alpha,
+                  Config.replay_buffer_size)
 
     # agent.load(agent_load_path)
     train.train_agent(agent, env, conf=Config)

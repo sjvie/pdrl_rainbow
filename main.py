@@ -3,7 +3,7 @@ import torch
 
 from config import Config
 #from test_config import Config
-
+import random
 import train
 from agent import Agent
 import gym
@@ -14,7 +14,7 @@ log_file_name = "log_00.txt"
 
 def main():
     # todo: log stuff
-    seed = np.random.randint(0,100)
+    seed = random.randint(0,100)
     np.random.seed(seed)
     torch.manual_seed(seed)
 

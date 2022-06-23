@@ -195,7 +195,7 @@ class Agent:
             current_q_values = current_q_values.gather(1,actions.unsqueeze(-1))
             #use Huberloss for error clipping, prevents exploding gradients
 
-            loss = F.mse_loss(current_q_values,target_q_values)
+            loss = F.huber_loss(current_q_values,target_q_values)
 
         # update the priorities in the replay buffer
         if self.use_per:
@@ -207,15 +207,13 @@ class Agent:
         #TODO: wird der loss mit dem weight multipliziert, nachdem die replaybuffer experiences geupdatet werden?
         # weight loss using weights from the replay buffer
 
-        if self.distributed:
-            # use the average loss of the batch
-            loss = loss.mean()
+
+        # use the average loss of the batch
+        loss = loss.mean()
         self.run.log({"mean_loss_over_time":loss})
         self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()
-        if not self.distributed:
-            loss = loss.mean()
         self.training_counter += 1
         return loss
 

@@ -46,7 +46,7 @@ def train_agent(agent, env, conf=Config):
 
             next_state, reward, done, _ = env.step(action)
             next_state = process_state(next_state)
-            reward = np.clip(reward, -1, 1)
+            #reward = np.clip(reward, -1, 1)
             episode_reward += reward
             # todo: action repetitions?
             agent.step(state, action, reward, done)

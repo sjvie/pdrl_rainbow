@@ -22,6 +22,8 @@ elif (config_settings == 'noisy_per'):
     from configs.noisy_per_config import Config
 elif (config_settings == 'distributed_per'):
     from configs.distributed_per_config import Config
+elif (config_settings == 'test'):
+    from test_config import Config
 else:
     from configs.rainbow_config import Config
 

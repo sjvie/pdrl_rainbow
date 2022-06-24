@@ -205,7 +205,7 @@ class Agent:
             current_q_values = current_q_values.gather(1,actions.unsqueeze(-1))
             #use Huberloss for error clipping, prevents exploding gradients
 
-            loss = F.huber_loss(current_q_values,target_q_values)
+            loss = F.huber_loss(current_q_values,target_q_values, reduction="none")
 
         # update the priorities in the replay buffer
         if self.use_per:

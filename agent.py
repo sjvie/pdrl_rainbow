@@ -210,7 +210,10 @@ class Agent:
         # update the priorities in the replay buffer
         if self.use_per:
             for i in range(self.batch_size):
-                self.replay_buffer.set_prio(idxs[i].item(), loss[i].item())
+                if self.distributed:
+                    self.replay_buffer.set_prio(idxs[i].item(), loss[i].item())
+                else:
+                    self.replay_buffer.set_prio(idxs[i].item(), abs(loss[i].item()))
                 self.run.log({"priorities":loss[i].item()})
             loss = loss * weights
 

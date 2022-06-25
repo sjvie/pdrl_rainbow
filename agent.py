@@ -213,12 +213,11 @@ class Agent:
                 if self.distributed:
                     self.replay_buffer.set_prio(idxs[i].item(), loss[i].item())
                 else:
-                    self.replay_buffer.set_prio(idxs[i].item(), abs(loss[i].item()))
+                    #in the PER paper they used a small constant to prevent that the loss is 0
+                    self.replay_buffer.set_prio(idxs[i].item(), abs(loss[i].item())+0.000000001)
                 self.run.log({"priorities":loss[i].item()})
             loss = loss * weights
 
-        #TODO: wird der loss mit dem weight multipliziert, nachdem die replaybuffer experiences geupdatet werden?
-        # weight loss using weights from the replay buffer
 
 
         # use the average loss of the batch

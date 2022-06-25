@@ -95,7 +95,7 @@ class Config:
 
     #set per & multistep to false if Duelling
     #prioritized Replay
-    use_per = False
+    use_per = True
 
     #multistep return
     use_multistep = False

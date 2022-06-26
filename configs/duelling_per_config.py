@@ -40,7 +40,7 @@ class Config:
     max_time = 30
 
     # paper: Memory size: 1M transitions
-    replay_buffer_size = 100000
+    replay_buffer_size = 1000000
 
     # paper: Replay period: every 4 agent steps
     replay_period = 4

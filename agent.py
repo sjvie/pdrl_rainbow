@@ -79,7 +79,6 @@ class Agent:
             "max_episodes": Config.num_episodes,
             "discount_factor": Config.discount_factor,
             "noisy_net_sigma": Config.noisy_sigma_zero,
-            "multistep n": Config.multi_step_n
         }
         self.run.log({"seed":self.seed})
 
@@ -215,7 +214,7 @@ class Agent:
                 else:
                     #in the PER paper they used a small constant to prevent that the loss is 0
                     self.replay_buffer.set_prio(idxs[i].item(), abs(loss[i].item())+0.000000001)
-                self.run.log({"priorities":loss[i].item()})
+                #self.run.log({"priorities":loss[i].item()})
             loss = loss * weights
 
 

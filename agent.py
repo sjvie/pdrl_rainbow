@@ -6,46 +6,41 @@ from torch.nn import functional as F
 import torch
 import wandb
 
-#from test_config import Config
-from config import Config
 from model import Model
-from replay_buffer import PrioritizedBuffer
+from replay_buffer import PrioritizedBuffer, Buffer
 import copy
-
-device = torch.device(Config.device if torch.cuda.is_available() else "cpu")
 
 
 class Agent:
 
-    def __init__(self, observation_shape, conv_channels, action_space, num_atoms, v_min, v_max, discount_factor,
-                 batch_size, n_step_returns, tensor_replay_buffer, use_per, use_multistep, noisy, epsilon, epsilon_min,
-                 distributed, seed, adam_learning_rate, adam_e, replay_buffer_beta_start,replay_buffer_alpha, replay_buffer_size):
+    def __init__(self, observation_shape, action_space, device, seed, conf):
         self.action_space = action_space
-        self.batch_size = batch_size
-        self.num_atoms = num_atoms
-        self.v_min = v_min
-        self.v_max = v_max
-        self.z_delta = (v_max - v_min) / (num_atoms - 1)
-        self.z_support = torch.arange(self.v_min, self.v_max + self.z_delta / 2, self.z_delta, device=device)
-        self.index_offset = torch.arange(0, self.batch_size, 1 / self.num_atoms, device=device).long() * self.num_atoms
-        self.n_step_returns = n_step_returns
-        self.discount_factor = discount_factor
-        self.discount_factor_k = torch.zeros(self.n_step_returns, dtype=torch.float32, device=device)
-        self.use_per = use_per
-        self.use_multistep = use_multistep
-        self.noisy = noisy
-        self.epsilon = epsilon
-        self.epsilon_min = epsilon_min
-        self.annealing_steps=1000000
-        #epsilon annealing over 1M steps to a minimum of 0.01
-        self.delta_eps = (self.epsilon-self.epsilon_min)/self.annealing_steps
-        self.adam_learning_rate= adam_learning_rate
-        self.adam_e = adam_e
-        self.replay_buffer_beta_start = replay_buffer_beta_start
-        self.replay_buffer_alpha = replay_buffer_alpha
-        self.replay_buffer_size = replay_buffer_size
-        self.distributed = distributed
-        self.online_model = Model(conv_channels, action_space, num_atoms,noisy=self.noisy,distributed=self.distributed,device=device)
+        self.conv_channels = conf.frame_stack
+        self.batch_size = conf.batch_size
+        self.num_atoms = conf.distributional_atoms
+        self.device = device
+        self.v_min = conf.distributional_v_min
+        self.v_max = conf.distributional_v_max
+        self.z_delta = (self.v_max - self.v_min) / (self.num_atoms - 1)
+        self.z_support = torch.arange(self.v_min, self.v_max + self.z_delta / 2, self.z_delta, device=self.device)
+        self.index_offset = torch.arange(0, self.batch_size, 1 / self.num_atoms,
+                                         device=self.device).long() * self.num_atoms
+        self.n_step_returns = conf.multi_step_n
+        self.discount_factor = conf.discount_factor
+        self.discount_factor_k = torch.zeros(self.n_step_returns, dtype=torch.float32, device=self.device)
+        self.use_per = conf.use_per
+        self.use_noisy = conf.use_noisy
+        self.epsilon = conf.epsilon_start
+        self.epsilon_end = conf.epsilon_end
+        self.epsilon_annealing_steps = conf.epsilon_annealing_steps
+        self.delta_eps = (self.epsilon - self.epsilon_end) / self.epsilon_annealing_steps
+        self.adam_learning_rate = conf.adam_learning_rate
+        self.adam_e = conf.adam_e
+        self.replay_buffer_beta_start = conf.replay_buffer_beta_start
+        self.replay_buffer_alpha = conf.replay_buffer_alpha
+        self.replay_buffer_size = conf.replay_buffer_size
+        self.use_distributed = conf.use_distributed
+        self.online_model = Model(self.conv_channels, self.action_space, device, conf)
         self.target_model = copy.deepcopy(self.online_model)
         self.optimizer = torch.optim.Adam(self.online_model.parameters(),
                                           lr=self.adam_learning_rate,
@@ -54,33 +49,35 @@ class Agent:
 
         # todo: linearly increase beta up to Config.replay_buffer_end
         self.replay_buffer_beta = self.replay_buffer_beta_start
-        self.tensor_replay_buffer = tensor_replay_buffer
-        self.replay_buffer = PrioritizedBuffer(self.replay_buffer_size,
-                                               observation_shape,
-                                               n_step_returns,
-                                               self.replay_buffer_alpha,
-                                               self.replay_buffer_beta,
-                                               device=device,
-                                               discount_factor=self.discount_factor,
-                                               tensor_memory=tensor_replay_buffer,
-                                               per=self.use_per,
-                                               multistep=self.use_multistep
-                                               )
+        self.tensor_replay_buffer = conf.tensor_replay_buffer
+
+        if self.use_per:
+            self.replay_buffer = PrioritizedBuffer(self.replay_buffer_size,
+                                                   observation_shape,
+                                                   device,
+                                                   conf
+                                                   )
+        else:
+            self.replay_buffer = Buffer(self.replay_buffer_size,
+                                        observation_shape,
+                                        device,
+                                        conf
+                                        )
 
         self.episode_counter = 0
         self.training_counter = 0
 
         # initializing Loging over Weights and Biases
-        self.run = wandb.init(project="pdrl", entity="gdlktemo")
-        #TODO: sollten wir mal ändern, da es auf der falschen config (theoretisch) läuft
-        #trotzdem kein Plan was das hier eigentlich macht
-        wandb.config ={
-            "learning_rate" : Config.adam_learning_rate,
-            "max_episodes": Config.num_episodes,
-            "discount_factor": Config.discount_factor,
-            "noisy_net_sigma": Config.noisy_sigma_zero,
+        self.run = wandb.init(project="pdrl", entity="pdrl")
+        # TODO: sollten wir mal ändern, da es auf der falschen config (theoretisch) läuft
+        # trotzdem kein Plan was das hier eigentlich macht
+        wandb.config = {
+            "learning_rate": conf.adam_learning_rate,
+            "max_episodes": conf.num_episodes,
+            "discount_factor": conf.discount_factor,
+            "noisy_net_sigma": conf.noisy_sigma_zero,
         }
-        self.run.log({"seed":self.seed})
+        self.run.log({"seed": self.seed})
 
     def next_episode(self):
         self.episode_counter += 1
@@ -90,7 +87,7 @@ class Agent:
 
     def step(self, state, action, reward, done):
         if self.tensor_replay_buffer:
-            state = torch.Tensor(state).to(device)
+            state = torch.Tensor(state).to(self.device)
 
         self.replay_buffer.add(state, action, reward, done)
 
@@ -100,21 +97,21 @@ class Agent:
 
         if not self.tensor_replay_buffer:
             # convert to tensors
-            states = torch.Tensor(states).to(device)
-            actions = torch.Tensor(actions).to(device).long()
-            rewards = torch.Tensor(rewards).to(device)
-            n_next_states = torch.Tensor(n_next_states).to(device)
-            dones = torch.Tensor(dones).to(device).long()
-            weights = torch.Tensor(weights).to(device)
+            states = torch.Tensor(states).to(self.device)
+            actions = torch.Tensor(actions).to(self.device).long()
+            rewards = torch.Tensor(rewards).to(self.device)
+            n_next_states = torch.Tensor(n_next_states).to(self.device)
+            dones = torch.Tensor(dones).to(self.device).long()
+            weights = torch.Tensor(weights).to(self.device)
         else:
             actions = actions.long()
             dones = dones.long()
 
         states = states / 255.0
         n_next_states = n_next_states / 255.0
-        if self.distributed:
+        if self.use_distributed:
             # initialize target distribution matrix
-            m = torch.zeros(self.batch_size, self.num_atoms).to(device)
+            m = torch.zeros(self.batch_size, self.num_atoms, device=self.device)
 
             # logarithmic output of online model for states
             # shape (batch_size, action_space, num_atoms)
@@ -144,11 +141,11 @@ class Agent:
                 #     for j in range(self.n_step_returns):
                 #         G[i] += rewards[i][j] * self.discount_factor ** j
 
-                #G = torch.sum(rewards * self.discount_factor_k, -1)
+                # G = torch.sum(rewards * self.discount_factor_k, -1)
 
                 # Tz = r + gamma*(1-done)*z
                 T_z = rewards.unsqueeze(-1) + torch.outer(self.discount_factor ** self.n_step_returns * (1 - dones),
-                                                    self.z_support)
+                                                          self.z_support)
 
                 # eingrenzen der Werte
                 T_z = T_z.clamp(min=self.v_min, max=self.v_max)
@@ -186,42 +183,40 @@ class Agent:
             # this makes the log(m) = -inf and loss = nan
             # loss = torch.sum(m * torch.log(m) - m * log_q_dist, dim=-1) # KL divergence
             loss = - torch.sum(m * log_q_dist_a, dim=-1)  # cross entropy
-        #Assuming if we don't choose Distributed RL we use Duelling RL
-        #TODO N-step
+        # Assuming if we don't choose Distributed RL we use Duelling RL
+        # TODO N-step
         else:
             with torch.no_grad():
                 rewards = rewards.unsqueeze(-1)
-                #compute next Q-value using target_network
+                # compute next Q-value using target_network
                 next_q_values = self.target_model(n_next_states)
-                #take action with highest q_value, _ gets the indices of the max value
-                next_q_values,_ = next_q_values.max(dim=1)
-                #avoid broadcast issue /just to be sure
-                next_q_values = next_q_values.reshape(-1,1)
+                # take action with highest q_value, _ gets the indices of the max value
+                next_q_values, _ = next_q_values.max(dim=1)
+                # avoid broadcast issue /just to be sure
+                next_q_values = next_q_values.reshape(-1, 1)
                 target_q_values = rewards + (1 - dones.unsqueeze(1)) * self.discount_factor * next_q_values
 
             current_q_values = self.online_model(states)
-            #ToDO: why does this work?!?
-            current_q_values = current_q_values.gather(1,actions.unsqueeze(-1))
-            #use Huberloss for error clipping, prevents exploding gradients
+            # ToDO: why does this work?!?
+            current_q_values = current_q_values.gather(1, actions.unsqueeze(-1))
+            # use Huberloss for error clipping, prevents exploding gradients
 
-            loss = F.huber_loss(current_q_values,target_q_values, reduction="none")
+            loss = F.huber_loss(current_q_values, target_q_values, reduction="none")
 
         # update the priorities in the replay buffer
         if self.use_per:
             for i in range(self.batch_size):
-                if self.distributed:
+                if self.use_distributed:
                     self.replay_buffer.set_prio(idxs[i].item(), loss[i].item())
                 else:
-                    #in the PER paper they used a small constant to prevent that the loss is 0
-                    self.replay_buffer.set_prio(idxs[i].item(), abs(loss[i].item())+0.000000001)
-                #self.run.log({"priorities":loss[i].item()})
+                    # in the PER paper they used a small constant to prevent that the loss is 0
+                    self.replay_buffer.set_prio(idxs[i].item(), abs(loss[i].item()) + 0.000000001)
+                # self.run.log({"priorities":loss[i].item()})
             loss = loss * weights
-
-
 
         # use the average loss of the batch
         loss = loss.mean()
-        self.run.log({"mean_loss_over_time":loss})
+        self.run.log({"mean_loss_over_time": loss})
         self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()
@@ -233,15 +228,17 @@ class Agent:
         :param np_state: (np array) numpy array with shape observation_shape
         :return (int): index of the selected action
         """
+
         self.epsilon -= self.delta_eps
-        if self.epsilon < self.epsilon_min:
-            self.epsilon = self.epsilon_min
-        if(random.random()>self.epsilon or self.noisy):
-            state = torch.from_numpy(np_state).to(device)
+        if self.epsilon < self.epsilon_end:
+            self.epsilon = self.epsilon_end
+
+        if random.random() > self.epsilon or self.use_noisy:
+            state = torch.from_numpy(np_state).to(self.device)
 
             state = state / 255.0
             with torch.no_grad():
-                if self.distributed:
+                if self.use_distributed:
 
                     # select action using online model
                     Q_dist = self.online_model(state)
@@ -254,13 +251,13 @@ class Agent:
                     action_index = torch.argmax(Q)
                 else:
                     Q = self.online_model(state)
-                    #get action_index with maximum Q value
-                    action_index = torch.argmax(Q,dim=1)
+                    # get action_index with maximum Q value
+                    action_index = torch.argmax(Q, dim=1)
 
             # return the index of the action
             return action_index.item()
         else:
-            return random.choice(range(0,self.action_space))
+            return random.choice(range(0, self.action_space))
 
     def save(self, path):
         Path(path).mkdir(parents=True, exist_ok=True)

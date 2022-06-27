@@ -2,18 +2,17 @@ import logging
 import time
 
 from config import Config
-#from test_config import Config
 import numpy as np
 import wandb
 
-def train_agent(agent, env, conf=Config):
 
+def train_agent(agent, env, conf=Config):
     if conf.num_episodes is None and conf.num_frames is None and conf.max_time is None:
         raise ValueError("Either num_episodes, num_frames or max_time must be specified")
 
     total_frames = 0
-    action_list=np.zeros(agent.action_space)
-    reward_list=np.zeros(500,dtype=np.int8)
+    action_list = np.zeros(agent.action_space)
+    reward_list = np.zeros(500, dtype=np.int8)
     episode = agent.episode_counter + 1
     if conf.num_episodes is not None:
         end_episode = episode + conf.num_episodes
@@ -21,11 +20,11 @@ def train_agent(agent, env, conf=Config):
         end_episode = None
     logging.info("Starting training")
     start_time = time.time()
-    agent.run.watch(agent.online_model,log='all')
+    agent.run.watch(agent.online_model, log='all')
     """while (end_episode is None or episode <= end_episode) \
             and (conf.num_frames is None or total_frames < conf.num_frames)\
             and (conf.max_time is None or time.time() < start_time + conf.max_time):"""
-    while(True):
+    while True:
 
         state = env.reset()
         state = process_state(state)
@@ -41,12 +40,11 @@ def train_agent(agent, env, conf=Config):
             episode_frames += 1
 
             action = agent.select_action(state)
-            action_list[action]+=1
-
+            action_list[action] += 1
 
             next_state, reward, done, _ = env.step(action)
             next_state = process_state(next_state)
-            #reward = np.clip(reward, -1, 1)
+            # reward = np.clip(reward, -1, 1)
             episode_reward += reward
             # todo: action repetitions?
             agent.step(state, action, reward, done)
@@ -74,9 +72,9 @@ def train_agent(agent, env, conf=Config):
                                                                                         total_frames,
                                                                                         episode_reward / episode_frames,
                                                                                         episode_loss / episode_frames))
-        agent.run.log({"episode_reward":episode_reward})
-        agent.run.log({"exploration_rate":agent.epsilon})
-        reward_list[episode%500]=episode_reward
+        agent.run.log({"episode_reward": episode_reward})
+        agent.run.log({"exploration_rate": agent.epsilon})
+        reward_list[episode % 500] = episode_reward
         episode_end_time = time.time()
         if conf.log_episode_end:
             fps = episode_frames / (episode_end_time - episode_start_time)
@@ -87,30 +85,33 @@ def train_agent(agent, env, conf=Config):
                                                                                                                 fps,
                                                                                                                 episode_reward,
                                                                                                                 episode_loss))
-        if episode % 200==0:
-            if(agent.action_space==6):
+        if episode % 200 == 0:
+            if agent.action_space == 6:
                 logging.info(
-                    '[AVERAGE] | Avg. reward: {:.2f} | Actiondistribution 0: {:.2f} 1: {:.2f} 2: {:.2f} 3: {:.2f} 4:{:.2f} 5:{:.2f}'.format(reward_list.mean(),
-                                                                                                                                            action_list[0]/action_list.sum(),
-                                                                                                                                            action_list[1]/action_list.sum(),
-                                                                                                                                            action_list[2]/action_list.sum(),
-                                                                                                                                            action_list[3]/action_list.sum(),
-                                                                                                                                            action_list[4]/action_list.sum(),
-                                                                                                                                            action_list[5]/action_list.sum())
+                    '[AVERAGE] | Avg. reward: {:.2f} | Actiondistribution 0: {:.2f} 1: {:.2f} 2: {:.2f} 3: {:.2f} 4:{:.2f} 5:{:.2f}'.format(
+                        reward_list.mean(),
+                        action_list[0] / action_list.sum(),
+                        action_list[1] / action_list.sum(),
+                        action_list[2] / action_list.sum(),
+                        action_list[3] / action_list.sum(),
+                        action_list[4] / action_list.sum(),
+                        action_list[5] / action_list.sum())
                 )
-            if(agent.action_space==3):
+            if agent.action_space == 3:
                 logging.info(
-                    '[AVERAGE] | Avg. reward: {:.2f} | Actiondistribution 0: {:.2f} 1: {:.2f} 2: {:.2f}'.format(reward_list.mean(),action_list[0],
-                                                                                                                                   action_list[1],
-                                                                                                                                  action_list[2])
+                    '[AVERAGE] | Avg. reward: {:.2f} | Actiondistribution 0: {:.2f} 1: {:.2f} 2: {:.2f}'.format(
+                        reward_list.mean(), action_list[0],
+                        action_list[1],
+                        action_list[2])
                 )
-            if(agent.action_space==4):
+            if agent.action_space == 4:
                 logging.info(
-                    '[AVERAGE] | Avg. reward: {:.2f} | Actiondistribution 0: {:.2f} 1: {:.2f} 2: {:.2f} 3: {:.2f}'.format(reward_list.mean(),
-                                                                                                                            action_list[0],
-                                                                                                                            action_list[1],
-                                                                                                                            action_list[2],
-                                                                                                                            action_list[3])
+                    '[AVERAGE] | Avg. reward: {:.2f} | Actiondistribution 0: {:.2f} 1: {:.2f} 2: {:.2f} 3: {:.2f}'.format(
+                        reward_list.mean(),
+                        action_list[0],
+                        action_list[1],
+                        action_list[2],
+                        action_list[3])
                 )
             action_list = np.zeros(agent.action_space)
         if episode % conf.save_agent_per_episodes == 0 and episode > 0:

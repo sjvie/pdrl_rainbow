@@ -58,6 +58,7 @@ class Config:
     # paper: Prioritization importance sampling beta: 0.4 -> 1.0
     replay_buffer_beta_start = 0.4
     replay_buffer_beta_end = 1.0
+    replay_buffer_beta_annealing_steps = 1000000
 
     # paper: Distributional atoms: 51
     distributional_atoms = 51
@@ -74,7 +75,8 @@ class Config:
     name = "RAINBOW"
 
     # GPU Device
-    device = "cuda:0"
+    gpu_device_name = "cuda:0"
+    cpu_device_name = "cpu"
 
     # Whether to store the replay buffer as torch tensors (as opposed to numpy arrays)
     tensor_replay_buffer = True
@@ -103,12 +105,13 @@ class Config:
     # paper: Multi-step returns n: 3, if multistep not used, n = 1
     multi_step_n = 1
     #set noisy net experience
-    noisy = True
+    use_noisy = True
     #use distributed rl
-    distributed = False
+    use_distributed = False
     #if noisy is false, you must consider epsilon greedy as exploration strategy(for now)
-    epsilon = 1
-    epsilon_min = 0.01
+    epsilon_start = 1
+    epsilon_end = 0.01
+    epsilon_annealing_steps = 1000000
 
 def config_benchmark():
     Config.log_per_frames = 1000000

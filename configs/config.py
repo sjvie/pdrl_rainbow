@@ -4,6 +4,7 @@ import torch
 
 
 class Config:
+    name = "DEFAULT_CONFIG"
 
     # paper: Adam learning rate: 0.0000625
     adam_learning_rate = 0.0000625
@@ -31,22 +32,22 @@ class Config:
 
     # todo
     # paper: ?
-    num_episodes = 1000000
+    num_episodes = 8000000
 
     # maximum amount of total frames (for training)
     num_frames = None
 
-    # maximum time to train
+    # maximum time to train (seconds)
     max_time = 30
 
-    # paper: Memory size: 1M transitions, test 100k
-    replay_buffer_size = 100000
+    # paper: Memory size: 1M transitions
+    replay_buffer_size = 1000000
 
     # paper: Replay period: every 4 agent steps
     replay_period = 4
 
     # paper: Min history to start learning: 80K frames
-    start_learning_after = 8000
+    start_learning_after = 80000
 
     # paper: Max frames per episode: 108K
     max_frames_per_episode = 108000
@@ -71,9 +72,6 @@ class Config:
     observation_width = 84
     observation_height = 84
 
-    # paper: title :P
-    name = "RAINBOW"
-
     # GPU Device
     gpu_device_name = "cuda:0"
     cpu_device_name = "cpu"
@@ -95,33 +93,19 @@ class Config:
     log_format = "[%(levelname)s %(asctime)s]: %(message)s"
     log_datefmt = "%y-%m-%d %H:%M:%S"
 
-    #set per & multistep to false if Duelling
-    #prioritized Replay
+    # set per & multistep to false if Duelling
+    # prioritized Replay
     use_per = True
 
     # paper: Multi-step returns n: 3, if multistep not used, n = 1
-    multi_step_n = 1
-    #set noisy net experience
-    use_noisy = False
-    #use distributed rl
-    use_distributed = False
-    #if noisy is false, you must consider epsilon greedy as exploration strategy(for now)
+    multi_step_n = 3
+    # set noisy net experience
+    use_noisy = True
+    # use distributed rl
+    use_distributed = True
+    # if noisy is false, you must consider epsilon greedy as exploration strategy(for now)
     epsilon_start = 1
     epsilon_end = 0.01
     epsilon_annealing_steps = 1000000
 
-def config_benchmark():
-    Config.log_per_frames = 1000000
-    Config.log_episode_end = True
-    Config.save_video = False
-    Config.start_learning_after = 100
-    Config.replay_buffer_size = 100000
-    Config.num_episodes = None
-    Config.num_frames = 3000
-    Config.max_time = None
-    Config.tensor_replay_buffer = True
-    Config.log_file = None
-    torch.manual_seed(0)
-    random.seed(0)
-    np.random.seed(0)
-
+    clip_reward = True

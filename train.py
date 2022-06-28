@@ -1,12 +1,10 @@
 import logging
 import time
-
-from config import Config
 import numpy as np
 import wandb
 
 
-def train_agent(agent, env, conf=Config):
+def train_agent(agent, env, conf):
     if conf.num_episodes is None and conf.num_frames is None and conf.max_time is None:
         raise ValueError("Either num_episodes, num_frames or max_time must be specified")
 
@@ -44,7 +42,10 @@ def train_agent(agent, env, conf=Config):
 
             next_state, reward, done, _ = env.step(action)
             next_state = process_state(next_state)
-            # reward = np.clip(reward, -1, 1)
+
+            if conf.clip_reward:
+                reward = np.clip(reward, -1, 1)
+
             episode_reward += reward
             # todo: action repetitions?
             agent.step(state, action, reward, done)
@@ -114,6 +115,7 @@ def train_agent(agent, env, conf=Config):
                         action_list[3])
                 )
             action_list = np.zeros(agent.action_space)
+
         if episode % conf.save_agent_per_episodes == 0 and episode > 0:
             agent.save(conf.agent_save_path + str(episode))
 

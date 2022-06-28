@@ -289,7 +289,7 @@ class SumMinMaxTree:
                 current_index = (current_index - 1) // 2
 
     def sample(self, sample_priority):
-        assert 0 <= sample_priority < self.sum()
+        assert 0 <= sample_priority <= self.sum()
 
         current_index = 0
         while current_index < (self.array_size - 1):

@@ -5,9 +5,6 @@ import wandb
 
 
 def train_agent(agent, env, conf):
-    if conf.num_episodes is None and conf.num_frames is None and conf.max_time is None:
-        raise ValueError("Either num_episodes, num_frames or max_time must be specified")
-
     total_frames = 0
     action_list = np.zeros(agent.action_space)
     reward_list = np.zeros(500, dtype=np.int8)
@@ -51,6 +48,7 @@ def train_agent(agent, env, conf):
 
             if total_frames > conf.start_learning_after and total_frames % conf.replay_period == 0:
                 loss = agent.train()
+                agent.run.log({"mean_loss_over_time": loss.item()})
                 episode_loss += loss
 
             if total_frames > conf.start_learning_after and total_frames % conf.target_model_period == 0:

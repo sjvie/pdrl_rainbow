@@ -68,15 +68,14 @@ class Agent:
         self.training_counter = 0
 
         # initializing Loging over Weights and Biases
-        self.run = wandb.init(project="pdrl", entity="pdrl")
-        # TODO: sollten wir mal ändern, da es auf der falschen config (theoretisch) läuft
-        # trotzdem kein Plan was das hier eigentlich macht
-        wandb.config = {
-            "learning_rate": conf.adam_learning_rate,
-            "max_episodes": conf.num_episodes,
-            "discount_factor": conf.discount_factor,
-            "noisy_net_sigma": conf.noisy_sigma_zero,
-        }
+        self.run = wandb.init(project="pdrl", entity="pdrl",
+                              config={
+                                  "learning_rate": conf.adam_learning_rate,
+                                  "max_episodes": conf.num_episodes,
+                                  "discount_factor": conf.discount_factor,
+                                  "noisy_net_sigma": conf.noisy_sigma_zero,
+                                  "replay_buffer_size": conf.replay_buffer_size
+                              })
         self.run.log({"seed": self.seed})
 
     def next_episode(self):
@@ -216,7 +215,6 @@ class Agent:
 
         # use the average loss of the batch
         loss = loss.mean()
-        self.run.log({"mean_loss_over_time": loss})
         self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()

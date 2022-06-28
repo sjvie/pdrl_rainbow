@@ -8,6 +8,8 @@ def train_agent(agent, env, conf):
     total_frames = 0
     action_list = np.zeros(agent.action_space)
     reward_list = np.zeros(500, dtype=np.int8)
+    loss_list = np.zeros(conf.loss_avg, dtype=np.float32)
+
     episode = agent.episode_counter + 1
     if conf.num_episodes is not None:
         end_episode = episode + conf.num_episodes
@@ -15,7 +17,9 @@ def train_agent(agent, env, conf):
         end_episode = None
     logging.info("Starting training")
     start_time = time.time()
-    agent.run.watch(agent.online_model, log='all')
+
+    agent.run.watch(agent.online_model, log='all', log_freq=conf.model_log_freq)
+
     while (end_episode is None or episode <= end_episode) \
             and (conf.num_frames is None or total_frames < conf.num_frames)\
             and (conf.max_time is None or time.time() < start_time + conf.max_time):
@@ -48,7 +52,13 @@ def train_agent(agent, env, conf):
 
             if total_frames > conf.start_learning_after and total_frames % conf.replay_period == 0:
                 loss = agent.train()
-                agent.run.log({"mean_loss_over_time": loss.item()})
+
+                # log the loss averaged over loss_avg frames
+                loss_list[total_frames % conf.loss_avg] = loss
+                if total_frames % conf.loss_avg == 0:
+                    agent.run.log({"frame_loss_avg": loss_list.mean()}, step=total_frames)
+
+                #agent.run.log({"mean_loss_over_time": loss.item()})
                 episode_loss += loss
 
             if total_frames > conf.start_learning_after and total_frames % conf.target_model_period == 0:
@@ -70,12 +80,16 @@ def train_agent(agent, env, conf):
                                                                                         total_frames,
                                                                                         episode_reward / episode_frames,
                                                                                         episode_loss / episode_frames))
-        agent.run.log({"episode_reward": episode_reward})
-        agent.run.log({"exploration_rate": agent.epsilon})
-        reward_list[episode % 500] = episode_reward
         episode_end_time = time.time()
+        fps = episode_frames / (episode_end_time - episode_start_time)
+
+        agent.run.log({"episode_fps": fps}, step=total_frames)
+        agent.run.log({"episode_reward": episode_reward}, step=total_frames)
+        agent.run.log({"episode_exploration_rate": agent.epsilon}, step=total_frames)
+        agent.run.log({"episode_length": episode_frames}, step=total_frames)
+
+        reward_list[episode % 500] = episode_reward
         if conf.log_episode_end:
-            fps = episode_frames / (episode_end_time - episode_start_time)
             logging.info(
                 '[EPISODE END] E/ef/tf: {}/{}/{} | fps: {:.2f} | Avg. reward: {:.3f} | Avg loss: {:.5f}'.format(episode,
                                                                                                                 episode_frames,

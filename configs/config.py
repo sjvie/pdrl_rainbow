@@ -114,6 +114,9 @@ class Config:
     agent_save_path = "agent/"
     log_file = "220613_01.log"
 
+    loss_avg = 100
+    model_log_freq = 2000
+
     # formatting of the log messages
     log_format = "[%(levelname)s %(asctime)s]: %(message)s"
     log_datefmt = "%y-%m-%d %H:%M:%S"

@@ -71,12 +71,16 @@ class Agent:
         self.run = wandb.init(project="pdrl", entity="pdrl",
                               config={
                                   "learning_rate": conf.adam_learning_rate,
-                                  "max_episodes": conf.num_episodes,
                                   "discount_factor": conf.discount_factor,
                                   "noisy_net_sigma": conf.noisy_sigma_zero,
-                                  "replay_buffer_size": conf.replay_buffer_size
+                                  "replay_buffer_size": conf.replay_buffer_size,
+                                  "seed": self.seed,
+                                  "use_per": conf.use_per,
+                                  "use_distributed": conf.use_distributed,
+                                  "multi_step_n": conf.multi_step_n,
+                                  "use_noisy": conf.use_noisy,
+                                  "loss_avg": conf.loss_avg
                               })
-        self.run.log({"seed": self.seed})
 
     def next_episode(self):
         self.episode_counter += 1

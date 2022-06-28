@@ -7,7 +7,7 @@ import random
 import train
 from agent import Agent
 import gym
-import cupy as np
+import numpy as np
 
 agent_load_path = "agent/30"
 log_file_name = "log_00.txt"
@@ -42,6 +42,7 @@ def main():
     logging.info("Cuda available: %s" % torch.cuda.is_available())
     logging.info("actionspace: %s" % action_space)
     logging.info("seed: %s" % seed)
+    logging.info("spec: %s" % env.spec)
 
     device = torch.device(Config.gpu_device_name if torch.cuda.is_available() else Config.cpu_device_name)
     agent = Agent(observation_shape,

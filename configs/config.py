@@ -6,6 +6,10 @@ import torch
 class Config:
     name = "DEFAULT_CONFIG"
 
+    #######
+    #       hyperparams
+    #######
+
     # paper: Adam learning rate: 0.0000625
     adam_learning_rate = 0.0000625
 
@@ -30,27 +34,11 @@ class Config:
     # paper: Adam epsilon: 1.5 x 10^-4
     adam_e = 1.5e-4
 
-    # todo
-    # paper: ?
-    num_episodes = 8000000
-
-    # maximum amount of total frames (for training)
-    num_frames = None
-
-    # maximum time to train (seconds)
-    max_time = 30
-
     # paper: Memory size: 1M transitions
     replay_buffer_size = 1000000
 
     # paper: Replay period: every 4 agent steps
     replay_period = 4
-
-    # paper: Min history to start learning: 80K frames
-    start_learning_after = 80000
-
-    # paper: Max frames per episode: 108K
-    max_frames_per_episode = 108000
 
     # paper: Prioritization exponent gamma: 0.5
     replay_buffer_alpha = 0.5
@@ -72,14 +60,51 @@ class Config:
     observation_width = 84
     observation_height = 84
 
-    # GPU Device
-    gpu_device_name = "cuda:0"
-    cpu_device_name = "cpu"
-
-    # Whether to store the replay buffer as torch tensors (as opposed to numpy arrays)
+    # whether to store the replay buffer as torch tensors (as opposed to numpy arrays)
     tensor_replay_buffer = True
 
-    # LOGGING
+    # whether to use prioritized experience replay
+    use_per = True
+
+    # paper: Multi-step returns n: 3, if multistep not used, n = 1
+    multi_step_n = 3
+
+    # whether to use noisy nets
+    use_noisy = True
+
+    # whether to use distributed rl
+    use_distributed = True
+
+    # if noisy is false, you must consider epsilon greedy as exploration strategy (for now)
+    epsilon_start = 1
+    epsilon_end = 0.01
+    epsilon_annealing_steps = 1000000
+
+    clip_reward = True
+
+    #######
+    #       training config
+    #######
+
+    # maximum amount of episodes to train for (inf if None)
+    num_episodes = None
+
+    # maximum amount of frames to train for (inf if None)
+    num_frames = None
+
+    # maximum time to train (seconds) (inf if None)
+    max_time = None
+
+    # paper: Min history to start learning: 80K frames
+    start_learning_after = 80000
+
+    # paper: Max frames per episode: 108K
+    max_frames_per_episode = 108000
+
+    #######
+    #       logging config
+    #######
+
     log_per_frames = 100000
     log_episode_end = True
     save_video = False
@@ -93,19 +118,10 @@ class Config:
     log_format = "[%(levelname)s %(asctime)s]: %(message)s"
     log_datefmt = "%y-%m-%d %H:%M:%S"
 
-    # set per & multistep to false if Duelling
-    # prioritized Replay
-    use_per = True
+    #######
+    #       miscellaneous
+    #######
 
-    # paper: Multi-step returns n: 3, if multistep not used, n = 1
-    multi_step_n = 3
-    # set noisy net experience
-    use_noisy = True
-    # use distributed rl
-    use_distributed = True
-    # if noisy is false, you must consider epsilon greedy as exploration strategy(for now)
-    epsilon_start = 1
-    epsilon_end = 0.01
-    epsilon_annealing_steps = 1000000
-
-    clip_reward = True
+    # GPU Device
+    gpu_device_name = "cuda:0"
+    cpu_device_name = "cpu"

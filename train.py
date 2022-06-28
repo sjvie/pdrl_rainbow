@@ -19,10 +19,9 @@ def train_agent(agent, env, conf):
     logging.info("Starting training")
     start_time = time.time()
     agent.run.watch(agent.online_model, log='all')
-    """while (end_episode is None or episode <= end_episode) \
+    while (end_episode is None or episode <= end_episode) \
             and (conf.num_frames is None or total_frames < conf.num_frames)\
-            and (conf.max_time is None or time.time() < start_time + conf.max_time):"""
-    while True:
+            and (conf.max_time is None or time.time() < start_time + conf.max_time):
 
         state = env.reset()
         state = process_state(state)

@@ -20,6 +20,8 @@ elif config_settings == 'duelling_per':
     from configs.duelling_per_config import Config
 elif config_settings == 'noisy_per':
     from configs.noisy_per_config import Config
+elif config_settings == 'noisy':
+    from configs.noisy_config import Config
 elif config_settings == 'distributed_per':
     from configs.distributed_per_config import Config
 elif config_settings == 'test':

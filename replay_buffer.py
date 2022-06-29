@@ -10,7 +10,6 @@ class Buffer:
         self.n_step_returns = conf.multi_step_n
         self.device = device
         self.discount_factor = conf.discount_factor
-        self.tensor_memory = conf.tensor_replay_buffer
         self.max_size = size
 
         self.current_size = 0
@@ -18,24 +17,23 @@ class Buffer:
 
         self.memory_size = size + self.n_step_returns
 
-        if self.tensor_memory:
-            self.obs_memory = torch.zeros((self.memory_size,) + observation_shape, dtype=torch.uint8,
-                                          device=self.device)
-            self.action_memory = torch.zeros(self.memory_size, dtype=torch.uint8, device=self.device)
-            self.reward_memory = torch.zeros(self.memory_size, dtype=torch.float32, device=self.device)
-            self.done_memory = torch.zeros(self.memory_size, dtype=torch.bool, device=self.device)
-        else:
-            dt = np.dtype(
-                [("obs", np.uint8, observation_shape), ("action", np.uint8), ("reward", np.float32), ("done", bool)])
-            self.memory = np.zeros(self.memory_size, dt)
+        self.state_memory = torch.zeros((self.memory_size,) + observation_shape, dtype=torch.uint8,
+                                        device=self.device)
+        self.action_memory = torch.zeros(self.memory_size, dtype=torch.uint8, device=self.device)
+        self.reward_memory = torch.zeros(self.memory_size, dtype=torch.float32, device=self.device)
+        self.done_memory = torch.zeros(self.memory_size, dtype=torch.bool, device=self.device)
 
     def add(self, state, action, reward, done):
-        self.set_memory(self.idx, (state, action, reward, done))
+        self.state_memory[self.idx] = state
+        self.action_memory[self.idx] = action
+        self.reward_memory[self.idx] = reward
+        self.done_memory[self.idx] = done
 
         # add to the rewards of the last n experiences
         for i in range(1, self.n_step_returns):
             r_idx = (self.idx - i) % self.memory_size
-            self.add_reward(r_idx, reward * self.discount_factor ** i)
+
+            self.reward_memory[r_idx] += reward * self.discount_factor ** i
 
         # move index by one
         self.idx = (self.idx + 1) % self.memory_size
@@ -54,7 +52,7 @@ class Buffer:
             idx = random.randint(0, self.memory_size - 1 - self.n_step_returns)
             weights[i] = 1
 
-            (states[i], actions[i], rewards[i], dones[i]), n_next_states[i] = self.get_experience(idx)
+            states[i], actions[i], rewards[i], dones[i], n_next_states[i] = self.get_experience(idx)
             indices[i] = idx
 
         return (states, actions, rewards, n_next_states, dones), weights, indices
@@ -62,75 +60,31 @@ class Buffer:
     def get_experience(self, idx):
         # get index of the state in n steps
         n_next_idx = (idx + self.n_step_returns) % self.memory_size
-        return self.get_memory(idx), self.get_memory(n_next_idx, experience_part=0)
+        return self.state_memory[idx], self.action_memory[idx], self.reward_memory[idx], self.done_memory[idx], \
+               self.state_memory[n_next_idx]
 
     def init_empty_batch(self, batch_size):
-        if self.tensor_memory:
-            states = torch.empty((batch_size,) + self.observation_shape, dtype=torch.uint8, device=self.device)
-            actions = torch.empty(batch_size, dtype=torch.uint8, device=self.device)
-            rewards = torch.empty(batch_size, dtype=torch.float32, device=self.device)
-            n_next_states = torch.empty((batch_size,) + self.observation_shape, dtype=torch.uint8, device=self.device)
-            dones = torch.empty(batch_size, dtype=torch.bool, device=self.device)
-            weights = torch.empty(batch_size, dtype=torch.float32, device=self.device)
-            indices = torch.empty(batch_size, dtype=torch.int32, device=self.device)
-        else:
-            states = np.empty((batch_size,) + self.observation_shape, dtype=np.uint8)
-            actions = np.empty(batch_size, dtype=np.uint8)
-            rewards = np.empty(batch_size, dtype=np.float32)
-            n_next_states = np.empty((batch_size,) + self.observation_shape, dtype=np.uint8)
-            dones = np.empty(batch_size, dtype=bool)
-            weights = np.empty(batch_size, dtype=np.float32)
-            indices = np.empty(batch_size, dtype=np.uint32)
+        states = torch.empty((batch_size,) + self.observation_shape, dtype=torch.uint8, device=self.device)
+        actions = torch.empty(batch_size, dtype=torch.uint8, device=self.device)
+        rewards = torch.empty(batch_size, dtype=torch.float32, device=self.device)
+        n_next_states = torch.empty((batch_size,) + self.observation_shape, dtype=torch.uint8, device=self.device)
+        dones = torch.empty(batch_size, dtype=torch.bool, device=self.device)
+        weights = torch.empty(batch_size, dtype=torch.float32, device=self.device)
+        indices = torch.empty(batch_size, dtype=torch.int32, device=self.device)
 
         return states, actions, rewards, n_next_states, dones, weights, indices
 
-    def add_reward(self, idx, reward):
-        if self.tensor_memory:
-            self.reward_memory[idx] += reward
-        else:
-            self.memory[idx][2] += reward
-
-    def set_memory(self, idx, experience):
-        if self.tensor_memory:
-            self.obs_memory[idx], self.action_memory[idx], self.reward_memory[idx], self.done_memory[idx] = experience
-        else:
-            self.memory[idx] = experience
-
-    def get_memory(self, idx, experience_part=None):
-        if self.tensor_memory:
-            if experience_part is None:
-                return self.obs_memory[idx], self.action_memory[idx], self.reward_memory[idx], self.done_memory[idx]
-            elif experience_part == 0:
-                return self.obs_memory[idx]
-            elif experience_part == 1:
-                return self.action_memory[idx]
-            elif experience_part == 2:
-                return self.reward_memory[idx]
-            elif experience_part == 3:
-                return self.done_memory[idx]
-        else:
-            if experience_part is None:
-                return self.memory[idx]
-            else:
-                return self.memory[idx][experience_part]
-
     def save(self, file_name):
-        if self.tensor_memory:
-            torch.save(self.obs_memory, file_name + "_obs.pt")
-            torch.save(self.action_memory, file_name + "_action.pt")
-            torch.save(self.reward_memory, file_name + "_reward.pt")
-            torch.save(self.done_memory, file_name + "_done.pt")
-        else:
-            np.save(file_name + ".npy", self.memory)
+        torch.save(self.state_memory, file_name + "_obs.pt")
+        torch.save(self.action_memory, file_name + "_action.pt")
+        torch.save(self.reward_memory, file_name + "_reward.pt")
+        torch.save(self.done_memory, file_name + "_done.pt")
 
     def load(self, file_name):
-        if self.tensor_memory:
-            self.obs_memory = torch.load(file_name + "_obs.pt").to(self.device)
-            self.action_memory = torch.load(file_name + "_action.pt").to(self.device)
-            self.reward_memory = torch.load(file_name + "_reward.pt").to(self.device)
-            self.done_memory = torch.load(file_name + "_done.pt").to(self.device)
-        else:
-            self.memory = np.load(file_name + ".npy")
+        self.state_memory = torch.load(file_name + "_obs.pt").to(self.device)
+        self.action_memory = torch.load(file_name + "_action.pt").to(self.device)
+        self.reward_memory = torch.load(file_name + "_reward.pt").to(self.device)
+        self.done_memory = torch.load(file_name + "_done.pt").to(self.device)
 
 
 class PrioritizedBuffer(Buffer):
@@ -144,7 +98,7 @@ class PrioritizedBuffer(Buffer):
         self.beta_annealing_steps = conf.replay_buffer_beta_annealing_steps
         self.delta_beta = (self.beta_end - self.beta) / self.beta_annealing_steps
 
-        self.tree = SumMinMaxTree(size, tensor_memory=False, device=self.device)
+        self.tree = SumMinMaxTree(size)
         self.tree_idx = 0
 
     def add(self, state, action, reward, done):
@@ -237,22 +191,16 @@ class PrioritizedBuffer(Buffer):
 
 class SumMinMaxTree:
 
-    def __init__(self, capacity, tensor_memory=False, device=None):
+    def __init__(self, capacity):
         self.capacity = capacity
-        self.tensor_memory = tensor_memory
-        self.device = device
         self.array_size = get_next_power_of_2(self.capacity)
-        if tensor_memory:
-            assert device is not None
-            self.sum_array = torch.zeros(self.array_size * 2 - 1, dtype=torch.float32, device=self.device)
-            self.min_array = torch.full((self.array_size * 2 - 1,), torch.inf, dtype=torch.float32, device=self.device)
-            self.max_array = torch.zeros(self.array_size * 2 - 1, dtype=torch.float32, device=self.device)
-        else:
-            # todo: possible memory optimization (if needed) -> maybe float16
-            self.sum_array = np.zeros(self.array_size * 2 - 1, dtype=np.float32)
-            self.min_array = np.empty(self.array_size * 2 - 1, dtype=np.float32)
-            self.min_array.fill(np.inf)
-            self.max_array = np.zeros(self.array_size * 2 - 1, dtype=np.float32)
+        self.data_index_offset = self.array_size - 1
+        # todo: possible memory optimization (if needed) -> maybe float16
+        self.sum_array = np.zeros(self.array_size * 2 - 1, dtype=np.float32)
+        self.min_array = np.empty(self.array_size * 2 - 1, dtype=np.float32)
+        self.min_array.fill(np.inf)
+        self.max_array = np.empty(self.array_size * 2 - 1, dtype=np.float32)
+        self.max_array.fill(-np.inf)
 
     def sum(self):
         return self.sum_array[0].item()
@@ -268,14 +216,11 @@ class SumMinMaxTree:
 
     def set_priority(self, data_index, priority):
         assert not math.isnan(priority)
-        current_index = data_index + self.array_size - 1
+        current_index = data_index + self.data_index_offset
         self.sum_array[current_index] = priority
         self.min_array[current_index] = priority
         self.max_array[current_index] = priority
-        if self.tensor_memory:
-            current_index = torch.div((current_index - 1), 2, rounding_mode='floor')
-        else:
-            current_index = (current_index - 1) // 2
+        current_index = (current_index - 1) // 2
 
         while current_index >= 0:
             child_index = current_index * 2 + 1
@@ -283,10 +228,7 @@ class SumMinMaxTree:
             self.min_array[current_index] = min(self.min_array[child_index], self.min_array[child_index + 1])
             self.max_array[current_index] = max(self.max_array[child_index], self.max_array[child_index + 1])
 
-            if self.tensor_memory:
-                current_index = torch.div((current_index - 1), 2, rounding_mode='floor')
-            else:
-                current_index = (current_index - 1) // 2
+            current_index = (current_index - 1) // 2
 
     def sample(self, sample_priority):
         assert 0 <= sample_priority <= self.sum()
@@ -306,37 +248,21 @@ class SumMinMaxTree:
         return data_index, self.sum_array[current_index]
 
     def clear(self):
-        if self.tensor_memory:
-            assert self.device is not None
-            self.sum_array = torch.zeros(self.array_size * 2 - 1, dtype=torch.float32, device=self.device)
-            self.min_array = torch.full((self.array_size * 2 - 1,), torch.inf, dtype=torch.float32, device=self.device)
-            self.max_array = torch.zeros(self.array_size * 2 - 1, dtype=torch.float32, device=self.device)
-        else:
-            # todo: possible memory optimization (if needed) -> maybe float16
-            self.sum_array = np.zeros(self.array_size * 2 - 1, dtype=np.float32)
-            self.min_array = np.empty(self.array_size * 2 - 1, dtype=np.float32)
-            self.min_array.fill(np.inf)
-            self.max_array = np.zeros(self.array_size * 2 - 1, dtype=np.float32)
+        # todo: possible memory optimization (if needed) -> maybe float16
+        self.sum_array = np.zeros(self.array_size * 2 - 1, dtype=np.float32)
+        self.min_array = np.empty(self.array_size * 2 - 1, dtype=np.float32)
+        self.min_array.fill(np.inf)
+        self.max_array = np.zeros(self.array_size * 2 - 1, dtype=np.float32)
 
     def save(self, file_name):
-        if self.tensor_memory:
-            torch.save(self.sum_array, file_name + "_sum.pt")
-            torch.save(self.min_array, file_name + "_min.pt")
-            torch.save(self.max_array, file_name + "_max.pt")
-        else:
-            np.save(file_name + "_sum.npy", self.sum_array)
-            np.save(file_name + "_min.npy", self.min_array)
-            np.save(file_name + "_max.npy", self.max_array)
+        np.save(file_name + "_sum.npy", self.sum_array)
+        np.save(file_name + "_min.npy", self.min_array)
+        np.save(file_name + "_max.npy", self.max_array)
 
     def load(self, file_name):
-        if self.tensor_memory:
-            self.sum_array = torch.load(file_name + "_sum.pt").to(self.device)
-            self.min_array = torch.load(file_name + "_min.pt").to(self.device)
-            self.max_array = torch.load(file_name + "_max.pt").to(self.device)
-        else:
-            self.sum_array = np.load(file_name + "_sum.npy")
-            self.min_array = np.load(file_name + "_min.npy")
-            self.max_array = np.load(file_name + "_max.npy")
+        self.sum_array = np.load(file_name + "_sum.npy")
+        self.min_array = np.load(file_name + "_min.npy")
+        self.max_array = np.load(file_name + "_max.npy")
 
 
 def get_next_power_of_2(k):

@@ -143,7 +143,7 @@ class PrioritizedBuffer(Buffer):
         batch_range = treesum / batch_size
 
         # get the max weight using the minimum priority
-        max_weight = ((1 / self.current_size) * (1 / self.tree.min())) ** self.beta
+        max_weight = (self.current_size * self.tree.min()) ** -self.beta
 
         for i in range(batch_size):
             # get the random priority to sample from the tree

@@ -49,6 +49,9 @@ class Config:
     replay_buffer_beta_end = 1.0
     replay_buffer_beta_annealing_steps = 1000000
 
+    # the priority for the first experience in the replay buffer
+    per_initial_max_priority = 1.0
+
     # paper: Distributional atoms: 51
     distributional_atoms = 51
 
@@ -59,9 +62,6 @@ class Config:
     # paper: Observation down-sampling: (84, 84)
     observation_width = 84
     observation_height = 84
-
-    # whether to store the replay buffer as torch tensors (as opposed to numpy arrays)
-    tensor_replay_buffer = True
 
     # whether to use prioritized experience replay
     use_per = True
@@ -85,6 +85,8 @@ class Config:
     #######
     #       training config
     #######
+
+    env_name = "ALE/Breakout-v5"
 
     # maximum amount of episodes to train for (inf if None)
     num_episodes = None

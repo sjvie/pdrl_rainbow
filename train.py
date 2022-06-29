@@ -57,6 +57,11 @@ def train_agent(agent, env, conf):
                 loss_list[total_frames % conf.loss_avg] = loss
                 if total_frames % conf.loss_avg == 0:
                     agent.run.log({"frame_loss_avg": loss_list.mean()}, step=total_frames)
+                    # todo TMP
+                    if conf.use_per:
+                        agent.run.log({"buffer_tree_sum": agent.replay_buffer.tree.sum()}, step=total_frames)
+                        agent.run.log({"buffer_tree_min": agent.replay_buffer.tree.min()}, step=total_frames)
+                        agent.run.log({"buffer_tree_max": agent.replay_buffer.tree.max()}, step=total_frames)
 
                 #agent.run.log({"mean_loss_over_time": loss.item()})
                 episode_loss += loss

@@ -33,7 +33,7 @@ class Agent:
         self.epsilon = conf.epsilon_start
         self.epsilon_end = conf.epsilon_end
         self.epsilon_annealing_steps = conf.epsilon_annealing_steps
-        self.delta_eps = (self.epsilon - self.epsilon_end) / self.epsilon_annealing_steps
+        self.delta_eps = (self.epsilon_end - self.epsilon) / self.epsilon_annealing_steps
         self.adam_learning_rate = conf.adam_learning_rate
         self.adam_e = conf.adam_e
         self.replay_buffer_beta_start = conf.replay_buffer_beta_start
@@ -49,7 +49,6 @@ class Agent:
 
         # todo: linearly increase beta up to Config.replay_buffer_end
         self.replay_buffer_beta = self.replay_buffer_beta_start
-        self.tensor_replay_buffer = conf.tensor_replay_buffer
 
         if self.use_per:
             self.replay_buffer = PrioritizedBuffer(self.replay_buffer_size,
@@ -70,16 +69,30 @@ class Agent:
         # initializing Loging over Weights and Biases
         self.run = wandb.init(project="pdrl", entity="pdrl",
                               config={
-                                  "learning_rate": conf.adam_learning_rate,
+                                  "config_name": conf.name,
+                                  "adam_learning_rate": conf.adam_learning_rate,
                                   "discount_factor": conf.discount_factor,
                                   "noisy_net_sigma": conf.noisy_sigma_zero,
                                   "replay_buffer_size": conf.replay_buffer_size,
+                                  "replay_buffer_alpha": conf.replay_buffer_alpha,
+                                  "replay_buffer_beta": {"start": conf.replay_buffer_beta_start,
+                                                         "end": conf.replay_buffer_beta_end,
+                                                         "annealing_steps": conf.replay_buffer_beta_annealing_steps},
+                                  "per_initial_max_priority": conf.per_initial_max_priority,
+                                  "distributional_atoms": conf.distributional_atoms,
+                                  "epsilon": {"start": conf.epsilon_start,
+                                              "end": conf.epsilon_end,
+                                              "annealing_steps": conf.epsilon_annealing_steps},
+                                  "clip_reward": conf.clip_reward,
                                   "seed": self.seed,
                                   "use_per": conf.use_per,
                                   "use_distributed": conf.use_distributed,
                                   "multi_step_n": conf.multi_step_n,
                                   "use_noisy": conf.use_noisy,
-                                  "loss_avg": conf.loss_avg
+                                  "loss_avg": conf.loss_avg,
+                                  "start_learning_after": conf.start_learning_after,
+                                  "device": self.device,
+                                  "env": conf.env_name
                               })
 
     def next_episode(self):
@@ -89,8 +102,7 @@ class Agent:
         self.target_model.load_state_dict(self.online_model.state_dict())
 
     def step(self, state, action, reward, done):
-        if self.tensor_replay_buffer:
-            state = torch.Tensor(state).to(self.device)
+        state = torch.Tensor(state).to(self.device)
 
         self.replay_buffer.add(state, action, reward, done)
 
@@ -98,17 +110,8 @@ class Agent:
         batch, weights, idxs = self.replay_buffer.get_batch(batch_size=self.batch_size)
         states, actions, rewards, n_next_states, dones = batch
 
-        if not self.tensor_replay_buffer:
-            # convert to tensors
-            states = torch.Tensor(states).to(self.device)
-            actions = torch.Tensor(actions).to(self.device).long()
-            rewards = torch.Tensor(rewards).to(self.device)
-            n_next_states = torch.Tensor(n_next_states).to(self.device)
-            dones = torch.Tensor(dones).to(self.device).long()
-            weights = torch.Tensor(weights).to(self.device)
-        else:
-            actions = actions.long()
-            dones = dones.long()
+        actions = actions.long()
+        dones = dones.long()
 
         states = states / 255.0
         n_next_states = n_next_states / 255.0
@@ -231,7 +234,7 @@ class Agent:
         :return (int): index of the selected action
         """
 
-        self.epsilon -= self.delta_eps
+        self.epsilon += self.delta_eps
         if self.epsilon < self.epsilon_end:
             self.epsilon = self.epsilon_end
 

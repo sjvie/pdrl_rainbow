@@ -38,6 +38,10 @@ class Buffer:
         # move index by one
         self.idx = (self.idx + 1) % self.memory_size
 
+        # increase size until max_size is reached
+        if self.current_size < self.max_size:
+            self.current_size += 1
+
     def get_batch(self, batch_size=32):
         """
         :param batch_size: (int): size of the batch to be sampled
@@ -49,7 +53,7 @@ class Buffer:
         states, actions, rewards, n_next_states, dones, weights, indices = self.init_empty_batch(batch_size)
 
         for i in range(batch_size):
-            idx = random.randint(0, self.memory_size - 1 - self.n_step_returns)
+            idx = (self.idx - random.randint(1, self.current_size)) % self.memory_size
             weights[i] = 1
 
             states[i], actions[i], rewards[i], dones[i], n_next_states[i] = self.get_experience(idx)
@@ -98,28 +102,25 @@ class PrioritizedBuffer(Buffer):
         self.beta_annealing_steps = conf.replay_buffer_beta_annealing_steps
         self.delta_beta = (self.beta_end - self.beta) / self.beta_annealing_steps
 
+        self.initial_max_priority = conf.per_initial_max_priority
+
         self.tree = SumMinMaxTree(size)
         self.tree_idx = 0
 
     def add(self, state, action, reward, done):
         super().add(state, action, reward, done)
 
-        if self.current_size >= self.n_step_returns:
+        if self.current_size > self.n_step_returns:
             # set the priority of the new experience
-            if self.current_size == self.n_step_returns:
+            # take the max priority of all experiences
+            max_priority = self.tree.max()
+            if max_priority == -np.inf:
                 # when the buffer is empty, just use value 1.0
-                max_priority = 1.0
-            else:
-                # take the max priority of all experiences
-                max_priority = self.tree.max()
+                max_priority = self.initial_max_priority
 
             # add the experience to the tree
             self.tree.add(self.tree_idx, max_priority)
             self.tree_idx = (self.tree_idx + 1) % self.max_size
-
-        # increase size until max_size is reached
-        if self.current_size < self.memory_size:
-            self.current_size += 1
 
         self.beta += self.delta_beta
         if self.beta > self.beta_end:
@@ -156,11 +157,9 @@ class PrioritizedBuffer(Buffer):
 
             # calculate the weight
             # w_j = (N* P(j))⁻beta  /max weight
-            weight = ((self.current_size * priority) ** -self.beta) / max_weight
+            weights[i] = ((self.current_size * priority) ** -self.beta) / max_weight
 
-            weights[i] = weight
-
-            (states[i], actions[i], rewards[i], dones[i]), n_next_states[i] = self.get_experience(idx)
+            states[i], actions[i], rewards[i], dones[i], n_next_states[i] = self.get_experience(idx)
             indices[i] = idx
 
         return (states, actions, rewards, n_next_states, dones), weights, indices
@@ -234,7 +233,7 @@ class SumMinMaxTree:
         assert 0 <= sample_priority <= self.sum()
 
         current_index = 0
-        while current_index < (self.array_size - 1):
+        while current_index < self.data_index_offset:
             left_index = current_index * 2 + 1
             left_priority = self.sum_array[left_index]
             if left_priority >= sample_priority:
@@ -243,16 +242,8 @@ class SumMinMaxTree:
                 sample_priority -= left_priority
                 current_index = left_index + 1
 
-        data_index = current_index - (self.array_size - 1)
-        assert 0 <= data_index < self.capacity
+        data_index = current_index - self.data_index_offset
         return data_index, self.sum_array[current_index]
-
-    def clear(self):
-        # todo: possible memory optimization (if needed) -> maybe float16
-        self.sum_array = np.zeros(self.array_size * 2 - 1, dtype=np.float32)
-        self.min_array = np.empty(self.array_size * 2 - 1, dtype=np.float32)
-        self.min_array.fill(np.inf)
-        self.max_array = np.zeros(self.array_size * 2 - 1, dtype=np.float32)
 
     def save(self, file_name):
         np.save(file_name + "_sum.npy", self.sum_array)

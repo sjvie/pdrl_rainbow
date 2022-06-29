@@ -59,7 +59,7 @@ def main():
 
 
 def atari():
-    env = gym.make("ALE/Breakout-v5", obs_type="grayscale", full_action_space=False, repeat_action_probability=0.0)
+    env = gym.make(Config.env_name, obs_type="grayscale", full_action_space=False, repeat_action_probability=0.0)
     env = gym.wrappers.ResizeObservation(env, (Config.observation_width, Config.observation_height))
     env = gym.wrappers.FrameStack(env, Config.frame_stack)
     if Config.save_video:

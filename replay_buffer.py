@@ -152,7 +152,9 @@ class PrioritizedBuffer(Buffer):
         # get the max weight using the minimum priority
         # todo: some other implementations just use the max weight of the batch
         #       what does this change?
-        max_weight = (self.current_size * self.tree.min()) ** -self.beta
+
+        min_probability = self.tree.min() / self.tree.sum()
+        max_weight = (self.current_size * min_probability) ** -self.beta
 
         prios = np.empty(batch_size, dtype=np.float32)
 

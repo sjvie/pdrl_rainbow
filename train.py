@@ -62,6 +62,7 @@ def train_agent(agent, env, conf):
                         agent.run.log({"buffer_tree_sum": agent.replay_buffer.tree.sum()}, step=total_frames)
                         agent.run.log({"buffer_tree_min": agent.replay_buffer.tree.min()}, step=total_frames)
                         agent.run.log({"buffer_tree_max": agent.replay_buffer.tree.max()}, step=total_frames)
+                        #agent.run.log({"buffer_tree": agent.replay_buffer.tree.sum_array[agent.replay_buffer.tree.data_index_offset:]}, step=total_frames)
 
                 #agent.run.log({"mean_loss_over_time": loss.item()})
                 episode_loss += loss
@@ -90,7 +91,8 @@ def train_agent(agent, env, conf):
 
         agent.run.log({"episode_fps": fps}, step=total_frames)
         agent.run.log({"episode_reward": episode_reward}, step=total_frames)
-        agent.run.log({"episode_exploration_rate": agent.epsilon}, step=total_frames)
+        if not conf.use_noisy:
+            agent.run.log({"episode_exploration_rate": agent.epsilon}, step=total_frames)
         agent.run.log({"episode_length": episode_frames}, step=total_frames)
 
         reward_list[episode % 500] = episode_reward

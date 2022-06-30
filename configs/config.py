@@ -116,7 +116,7 @@ class Config:
     agent_save_path = "agent/"
     log_file = "220613_01.log"
 
-    loss_avg = 100
+    loss_avg = 50
     model_log_freq = 2000
 
     # formatting of the log messages
@@ -132,4 +132,4 @@ class Config:
     cpu_device_name = "cpu"
 
     # replay buffer small priority offset
-    replay_buffer_prio_offset = 1e-9
+    replay_buffer_prio_offset = 1e-6

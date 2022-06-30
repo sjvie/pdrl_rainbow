@@ -211,6 +211,7 @@ class Agent:
 
             loss = F.huber_loss(current_q_values, target_q_values, reduction="none")
 
+        loss_copy = loss.clone()
         # update the priorities in the replay buffer
         if self.use_per:
             for i in range(self.batch_size):
@@ -219,7 +220,6 @@ class Agent:
                 else:
                     # in the PER paper they used a small constant to prevent that the loss is 0
                     self.replay_buffer.set_prio(idxs[i].item(), abs(loss[i].item()) + self.replay_buffer_prio_offset)
-                # self.run.log({"priorities":loss[i].item()})
             loss = loss * weights
 
         # use the average loss of the batch
@@ -228,7 +228,7 @@ class Agent:
         loss.backward()
         self.optimizer.step()
         self.training_counter += 1
-        return loss
+        return loss_copy, weights
 
     def select_action(self, np_state):
         """

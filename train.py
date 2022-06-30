@@ -6,9 +6,11 @@ import wandb
 
 def train_agent(agent, env, conf):
     total_frames = 0
+    train_frames = 0
     action_list = np.zeros(agent.action_space)
     reward_list = np.zeros(500, dtype=np.int8)
     loss_list = np.zeros(conf.loss_avg, dtype=np.float32)
+    weight_list = np.zeros(conf.loss_avg, dtype=np.float32)
 
     episode = agent.episode_counter + 1
     if conf.num_episodes is not None:
@@ -51,14 +53,22 @@ def train_agent(agent, env, conf):
             agent.step(state, action, reward, done)
 
             if total_frames > conf.start_learning_after and total_frames % conf.replay_period == 0:
-                loss = agent.train()
+                loss, weights = agent.train()
+                loss = loss.mean()
+                if conf.use_per:
+                    weights = weights.mean()
 
                 # log the loss averaged over loss_avg frames
-                loss_list[total_frames % conf.loss_avg] = loss
-                if total_frames % conf.loss_avg == 0:
+                loss_list[train_frames % conf.loss_avg] = loss
+                weight_list[train_frames % conf.loss_avg] = weights
+
+                if train_frames % conf.loss_avg == 0:
                     agent.run.log({"frame_loss_avg": loss_list.mean()}, step=total_frames)
+                    agent.run.log({"frame_loss_min": loss_list.min()}, step=total_frames)
+                    agent.run.log({"frame_loss_max": loss_list.max()}, step=total_frames)
                     # todo TMP
                     if conf.use_per:
+                        agent.run.log({"frame_weights_avg": weight_list.mean()}, step=total_frames)
                         agent.run.log({"buffer_tree_sum": agent.replay_buffer.tree.sum()}, step=total_frames)
                         agent.run.log({"buffer_tree_min": agent.replay_buffer.tree.min()}, step=total_frames)
                         agent.run.log({"buffer_tree_max": agent.replay_buffer.tree.max()}, step=total_frames)
@@ -66,6 +76,7 @@ def train_agent(agent, env, conf):
 
                 #agent.run.log({"mean_loss_over_time": loss.item()})
                 episode_loss += loss
+                train_frames += 1
 
             if total_frames > conf.start_learning_after and total_frames % conf.target_model_period == 0:
                 agent.update_target_model()

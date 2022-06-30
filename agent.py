@@ -45,6 +45,8 @@ class Agent:
         self.optimizer = torch.optim.Adam(self.online_model.parameters(),
                                           lr=self.adam_learning_rate,
                                           eps=self.adam_e)
+
+        self.replay_buffer_prio_offset = conf.replay_buffer_prio_offset
         self.seed = seed
 
         # todo: linearly increase beta up to Config.replay_buffer_end
@@ -216,7 +218,7 @@ class Agent:
                     self.replay_buffer.set_prio(idxs[i].item(), loss[i].item())
                 else:
                     # in the PER paper they used a small constant to prevent that the loss is 0
-                    self.replay_buffer.set_prio(idxs[i].item(), abs(loss[i].item()) + 0.000000001)
+                    self.replay_buffer.set_prio(idxs[i].item(), abs(loss[i].item()) + self.replay_buffer_prio_offset)
                 # self.run.log({"priorities":loss[i].item()})
             loss = loss * weights
 

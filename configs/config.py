@@ -130,3 +130,6 @@ class Config:
     # GPU Device
     gpu_device_name = "cuda:0"
     cpu_device_name = "cpu"
+
+    # replay buffer small priority offset
+    replay_buffer_prio_offset = 1e-9

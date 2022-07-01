@@ -218,7 +218,7 @@ class Agent:
         if self.use_per:
             for i in range(self.batch_size):
                 if self.use_distributed:
-                    self.replay_buffer.set_prio(idxs[i].item(), loss[i].item())
+                    self.replay_buffer.set_prio(idxs[i].item(), abs(loss[i].item())+ self.replay_buffer_prio_offset)
                 else:
                     # in the PER paper they used a small constant to prevent that the loss is 0
                     self.replay_buffer.set_prio(idxs[i].item(), abs(loss[i].item()) + self.replay_buffer_prio_offset)

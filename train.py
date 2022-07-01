@@ -9,8 +9,8 @@ def train_agent(agent, env, conf):
     train_frames = 0
     action_list = np.zeros(agent.action_space)
     reward_list = np.zeros(500, dtype=np.int8)
-    loss_list = np.zeros(conf.loss_avg, dtype=np.float32)
-    weight_list = np.zeros(conf.loss_avg, dtype=np.float32)
+    loss_list = np.zeros((conf.loss_avg, conf.batch_size), dtype=np.float32)
+    weight_list = np.zeros((conf.loss_avg, conf.batch_size), dtype=np.float32)
 
     episode = agent.episode_counter + 1
     if conf.num_episodes is not None:
@@ -54,9 +54,11 @@ def train_agent(agent, env, conf):
 
             if total_frames > conf.start_learning_after and total_frames % conf.replay_period == 0:
                 loss, weights = agent.train()
-                loss = loss.mean()
+                loss = loss.cpu().detach().numpy()
+                #loss = loss.mean()
                 if conf.use_per:
-                    weights = weights.mean()
+                    weights = weights.cpu().detach().numpy()
+                #    weights = weights.mean()
 
                 # log the loss averaged over loss_avg frames
                 loss_list[train_frames % conf.loss_avg] = loss
@@ -75,7 +77,7 @@ def train_agent(agent, env, conf):
                         #agent.run.log({"buffer_tree": agent.replay_buffer.tree.sum_array[agent.replay_buffer.tree.data_index_offset:]}, step=total_frames)
 
                 #agent.run.log({"mean_loss_over_time": loss.item()})
-                episode_loss += loss
+                episode_loss += loss.sum()
                 train_frames += 1
 
             if total_frames > conf.start_learning_after and total_frames % conf.target_model_period == 0:

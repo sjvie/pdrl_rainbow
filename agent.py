@@ -211,7 +211,9 @@ class Agent:
 
             loss = F.huber_loss(current_q_values, target_q_values, reduction="none")
 
+        loss = loss.squeeze()
         loss_copy = loss.clone()
+
         # update the priorities in the replay buffer
         if self.use_per:
             for i in range(self.batch_size):

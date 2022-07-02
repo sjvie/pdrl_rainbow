@@ -95,6 +95,9 @@ class Buffer:
         self.reward_memory = torch.load(file_name + "_reward.pt").to(self.device)
         self.done_memory = torch.load(file_name + "_done.pt").to(self.device)
 
+    def set_prio(self, param, param1):
+        raise NotImplementedError("this method is not implemented, consider using PrioritizedBuffer")
+
 
 class PrioritizedBuffer(Buffer):
 

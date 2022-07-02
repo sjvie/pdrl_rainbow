@@ -1,3 +1,4 @@
+import functools
 import math
 import torch.nn as nn
 import torch
@@ -6,12 +7,8 @@ import torch
 class Model(nn.Module):
 
     def __init__(self, conv_channels, action_space, device, conf):
-        """
-        :param input_dim (int): the length of the input vector
-        :param action_space (int): the amount of actions
-        :param num_atoms (int): the amount of atoms for the probability distribution of each action
-        """
         super().__init__()
+
         self.action_space = action_space
         self.num_atoms = conf.distributional_atoms
         self.use_distributed = conf.use_distributed
@@ -21,73 +18,40 @@ class Model(nn.Module):
         self.log_softmax = nn.LogSoftmax(dim=1)
 
         self.conv = nn.Sequential(
-            nn.Conv2d(in_channels=conv_channels, out_channels=32, kernel_size=8, stride=4, device=device), nn.ReLU(),
-            nn.Conv2d(in_channels=32, out_channels=64, kernel_size=4, stride=2, device=device), nn.ReLU(),
-            nn.Conv2d(in_channels=64, out_channels=64, kernel_size=3, stride=1, device=device), nn.ReLU()
+            nn.Conv2d(in_channels=conv_channels, out_channels=32, kernel_size=8, stride=4, device=device),
+            nn.ReLU(),
+            nn.Conv2d(in_channels=32, out_channels=64, kernel_size=4, stride=2, device=device),
+            nn.ReLU(),
+            nn.Conv2d(in_channels=64, out_channels=64, kernel_size=3, stride=1, device=device),
+            nn.ReLU()
         )
 
-        sigma_zero = 0.5
+        sigma_zero = conf.noisy_sigma_zero
 
         # the size of the output of the convolutional layer
         # 64 * 7 * 7 TODO: checken ob das richtig ist
         self.conv_output_size = 3136
-        if self.use_distributed:
-            if self.use_noisy:
-                self.value = nn.Sequential(
-                    NoisyLinear(input_dim=self.conv_output_size, output_dim=512, sigma_zero=sigma_zero, device=device),
-                    nn.ReLU(),
-                    NoisyLinear(input_dim=512, output_dim=self.num_atoms, sigma_zero=sigma_zero, device=device),
-                    # nn.Linear(in_channels=64, out_channels=512), nn.ReLU(),
-                    # nn.Linear(512, 1)
-                )
 
-                self.advantage = nn.Sequential(
-                    NoisyLinear(input_dim=self.conv_output_size, output_dim=512, sigma_zero=sigma_zero, device=device),
-                    nn.ReLU(),
-                    NoisyLinear(input_dim=512, output_dim=action_space * self.num_atoms, sigma_zero=sigma_zero,
-                                device=device),
-                    # nn.Linear(in_channels=64, out_channels=512), nn.ReLU(),
-                    # nn.Linear(512, action_space)
-                )
-            else:
-                self.value = nn.Sequential(
-                    nn.Linear(self.conv_output_size, 512, device=device),
-                    nn.ReLU(),
-                    nn.Linear(512, self.num_atoms, device=device)
-                )
-                self.advantage = nn.Sequential(
-                    nn.Linear(self.conv_output_size, 512, device=device),
-                    nn.ReLU(),
-                    nn.Linear(512, action_space * self.num_atoms, device=device)
-                )
+        if self.use_noisy:
+            layer = functools.partial(NoisyLinear, sigma_zero=sigma_zero)
         else:
-            if self.use_noisy:
-                self.value = nn.Sequential(
-                    NoisyLinear(input_dim=self.conv_output_size, output_dim=512, sigma_zero=sigma_zero, device=device),
-                    nn.ReLU(),
-                    NoisyLinear(input_dim=512, output_dim=1, sigma_zero=sigma_zero, device=device),
-                    # nn.Linear(in_channels=64, out_channels=512), nn.ReLU(),
-                    # nn.Linear(512, 1)
-                )
+            layer = nn.Linear
 
-                self.advantage = nn.Sequential(
-                    NoisyLinear(input_dim=self.conv_output_size, output_dim=512, sigma_zero=sigma_zero, device=device),
-                    nn.ReLU(),
-                    NoisyLinear(input_dim=512, output_dim=action_space, sigma_zero=sigma_zero, device=device),
-                    # nn.Linear(in_channels=64, out_channels=512), nn.ReLU(),
-                    # nn.Linear(512, action_space)
-                )
-            else:
-                self.value = nn.Sequential(
-                    nn.Linear(self.conv_output_size, 512, device=device),
-                    nn.ReLU(),
-                    nn.Linear(512, 1, device=device)
-                )
-                self.advantage = nn.Sequential(
-                    nn.Linear(self.conv_output_size, 512, device=device),
-                    nn.ReLU(),
-                    nn.Linear(512, action_space, device=device)
-                )
+        if not self.use_distributed:
+            self.num_atoms = 1
+
+        self.value = nn.Sequential(
+            layer(in_features=self.conv_output_size, out_features=512, device=device),
+            nn.ReLU(),
+            layer(in_features=512, out_features=self.num_atoms, device=device),
+        )
+
+        self.advantage = nn.Sequential(
+            layer(in_features=self.conv_output_size, out_features=512, device=device),
+            nn.ReLU(),
+            layer(in_features=512, out_features=action_space * self.num_atoms, device=device),
+        )
+
 
     def forward(self, x, log=False):
         """
@@ -126,27 +90,27 @@ class Model(nn.Module):
 
 
 class NoisyLinear(nn.Module):
-    def __init__(self, input_dim, output_dim, device, sigma_zero=0.5):
+    def __init__(self, in_features, out_features, device, sigma_zero=0.5):
         super().__init__()
-        self.input_dim = input_dim
-        self.output_dim = output_dim
+        self.input_dim = in_features
+        self.output_dim = out_features
         self.device = device
         self.sigma_zero = sigma_zero
 
-        self.lin_weights = nn.Parameter(torch.empty((output_dim, input_dim), dtype=torch.float32, device=device))
-        self.noisy_weights = nn.Parameter(torch.empty((output_dim, input_dim), dtype=torch.float32, device=device))
+        self.lin_weights = nn.Parameter(torch.empty((out_features, in_features), dtype=torch.float32, device=device))
+        self.noisy_weights = nn.Parameter(torch.empty((out_features, in_features), dtype=torch.float32, device=device))
 
-        self.lin_bias = nn.Parameter(torch.empty(output_dim, dtype=torch.float32, device=device))
-        self.noisy_bias = nn.Parameter(torch.empty(output_dim, dtype=torch.float32, device=device))
+        self.lin_bias = nn.Parameter(torch.empty(out_features, dtype=torch.float32, device=device))
+        self.noisy_bias = nn.Parameter(torch.empty(out_features, dtype=torch.float32, device=device))
 
         # initialize the weights and bias according to section 3.2 in the noisy net paper
         # init linear weights and bias from an independent uniform distribution U[-1/sqrt(p), 1/sqrt(p)]
-        lin_init_dist_bounds = math.sqrt(1 / input_dim)
+        lin_init_dist_bounds = math.sqrt(1 / in_features)
         nn.init.uniform_(self.lin_weights, -lin_init_dist_bounds, lin_init_dist_bounds)
         nn.init.uniform_(self.lin_bias, -lin_init_dist_bounds, lin_init_dist_bounds)
 
         # init noisy weights and bias to a constant sigma_zero/sqrt(p)
-        noisy_init_constant = self.sigma_zero / math.sqrt(input_dim)
+        noisy_init_constant = self.sigma_zero / math.sqrt(in_features)
         nn.init.constant_(self.noisy_weights, noisy_init_constant)
         nn.init.constant_(self.noisy_bias, noisy_init_constant)
 

@@ -12,7 +12,7 @@ def train_agent(agent, env, conf):
     loss_list = np.zeros((conf.loss_avg, conf.batch_size), dtype=np.float32)
     weight_list = np.zeros((conf.loss_avg, conf.batch_size), dtype=np.float32)
 
-    episode = agent.episode_counter + 1
+    episode = 1
     if conf.num_episodes is not None:
         end_episode = episode + conf.num_episodes
     else:
@@ -20,7 +20,8 @@ def train_agent(agent, env, conf):
     logging.info("Starting training")
     start_time = time.time()
 
-    agent.run.watch(agent.online_model, log='all', log_freq=conf.model_log_freq)
+    if conf.log_wandb:
+        agent.run.watch(agent.online_model, log='all', log_freq=conf.model_log_freq)
 
     while (end_episode is None or episode <= end_episode) \
             and (conf.num_frames is None or total_frames < conf.num_frames)\
@@ -60,11 +61,7 @@ def train_agent(agent, env, conf):
                     weights = weights.cpu().detach().numpy()
                 #    weights = weights.mean()
 
-                # log the loss averaged over loss_avg frames
-                loss_list[train_frames % conf.loss_avg] = loss
-                weight_list[train_frames % conf.loss_avg] = weights
-
-                if train_frames % conf.loss_avg == 0:
+                if conf.log_wandb and train_frames % conf.loss_avg == 0 and train_frames >= conf.loss_avg:
                     agent.run.log({"frame_loss_avg": loss_list.mean()}, step=total_frames)
                     agent.run.log({"frame_loss_min": loss_list.min()}, step=total_frames)
                     agent.run.log({"frame_loss_max": loss_list.max()}, step=total_frames)
@@ -75,6 +72,10 @@ def train_agent(agent, env, conf):
                         agent.run.log({"buffer_tree_min": agent.replay_buffer.tree.min()}, step=total_frames)
                         agent.run.log({"buffer_tree_max": agent.replay_buffer.tree.max()}, step=total_frames)
                         #agent.run.log({"buffer_tree": agent.replay_buffer.tree.sum_array[agent.replay_buffer.tree.data_index_offset:]}, step=total_frames)
+
+                # log the loss averaged over loss_avg frames
+                loss_list[train_frames % conf.loss_avg] = loss
+                weight_list[train_frames % conf.loss_avg] = weights
 
                 #agent.run.log({"mean_loss_over_time": loss.item()})
                 episode_loss += loss.sum()
@@ -102,11 +103,12 @@ def train_agent(agent, env, conf):
         episode_end_time = time.time()
         fps = episode_frames / (episode_end_time - episode_start_time)
 
-        agent.run.log({"episode_fps": fps}, step=total_frames)
-        agent.run.log({"episode_reward": episode_reward}, step=total_frames)
-        if not conf.use_noisy:
-            agent.run.log({"episode_exploration_rate": agent.epsilon}, step=total_frames)
-        agent.run.log({"episode_length": episode_frames}, step=total_frames)
+        if conf.log_wandb:
+            agent.run.log({"episode_fps": fps}, step=total_frames)
+            agent.run.log({"episode_reward": episode_reward}, step=total_frames)
+            if not conf.use_noisy:
+                agent.run.log({"episode_exploration_rate": agent.epsilon}, step=total_frames)
+            agent.run.log({"episode_length": episode_frames}, step=total_frames)
 
         reward_list[episode % 500] = episode_reward
         if conf.log_episode_end:

@@ -107,6 +107,8 @@ class Config:
     #       logging config
     #######
 
+    log_wandb = True
+
     log_per_frames = 100000
     log_episode_end = True
     save_video = False
@@ -132,4 +134,4 @@ class Config:
     cpu_device_name = "cpu"
 
     # replay buffer small priority offset
-    replay_buffer_prio_offset = 1e-6
+    replay_buffer_prio_offset = 1e-10

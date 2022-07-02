@@ -24,6 +24,8 @@ elif config_settings == 'noisy':
     from configs.noisy_config import Config
 elif config_settings == 'distributed_per':
     from configs.distributed_per_config import Config
+elif config_settings == 'distributed':
+    from configs.distributed_normal import Config
 elif config_settings == 'test':
     from configs.test_config import Config
 else:

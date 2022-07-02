@@ -102,15 +102,17 @@ class Model(nn.Module):
         # value stream (linear layers)
         value = self.value(c)
 
-        # value stream (linear layers)
+        # advantage stream (linear layers)
         advantage = self.advantage(c)
-        # duelling + distributed case
+
         if self.use_distributed:
             # convert one dimensional tensor to two dimensions
             advantage = advantage.view(-1, self.action_space, self.num_atoms)
 
+            value = value.view(-1, 1, self.num_atoms)
+
             # combine value and advantage stream
-            Q_dist = value.unsqueeze(dim=-2) + advantage - advantage.mean(dim=-1, keepdim=True)
+            Q_dist = value + advantage - advantage.mean(dim=1, keepdim=True)
             Q_dist = Q_dist.squeeze()
 
             # apply softmax (with or without log)
@@ -118,7 +120,6 @@ class Model(nn.Module):
                 return self.log_softmax(Q_dist)
             else:
                 return self.softmax(Q_dist)
-        # duelling case without distributed
         else:
             q_values = value + (advantage - advantage.mean())
             return q_values

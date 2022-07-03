@@ -50,26 +50,15 @@ class Buffer:
                                                 list of indices of the experiences in the buffer
         """
 
-        states, actions, rewards, n_next_states, dones = self.init_empty_batch(batch_size)
+        indices = torch.randint(low=1, high=self.current_size + 1, size=(batch_size,), device=self.device)
+        indices = (self.idx - indices) % self.memory_size
 
-        indices = torch.empty(batch_size, dtype=torch.long)
-
-        for i in range(batch_size):
-            idx = (self.idx - random.randint(1, self.current_size)) % self.memory_size
-
-            states[i], actions[i], rewards[i], dones[i], n_next_states[i] = self.get_experience(idx)
-            indices[i] = idx
+        states, actions, rewards, dones, n_next_states = self.get_experiences(indices)
 
         return (states, actions, rewards, n_next_states, dones), None, indices
 
-    def get_experience(self, idx):
-        # get index of the state in n steps
-        n_next_idx = (idx + self.n_step_returns) % self.memory_size
-        return self.state_memory[idx], self.action_memory[idx], self.reward_memory[idx], self.done_memory[idx], \
-               self.state_memory[n_next_idx]
-
     def get_experiences(self, idxs):
-        # get index of the state in n steps
+        # get indices of the state in n steps
         n_next_idxs = (idxs + self.n_step_returns) % self.memory_size
         return self.state_memory[idxs], self.action_memory[idxs], self.reward_memory[idxs], self.done_memory[idxs], \
                self.state_memory[n_next_idxs]
@@ -142,9 +131,7 @@ class PrioritizedBuffer(Buffer):
                                                 list of indices of the experiences in the buffer
         """
 
-        states, actions, rewards, n_next_states, dones = self.init_empty_batch(batch_size)
         indices = torch.empty(batch_size, dtype=torch.long, device=self.device)
-        weights = torch.empty(batch_size, dtype=torch.float32, device=self.device)
 
         # get total sum of priorities
         treesum = self.tree.sum()
@@ -157,7 +144,7 @@ class PrioritizedBuffer(Buffer):
         #       what does this change?
 
         min_probability = self.tree.min() / self.tree.sum()
-        max_weight = (self.current_size * min_probability) ** -self.beta
+        max_weight = (self.current_size * min_probability) ** (-self.beta)
 
         prios = np.empty(batch_size, dtype=np.float32)
 
@@ -184,7 +171,7 @@ class PrioritizedBuffer(Buffer):
 
         # calculate weights from probabilities
         # w_j = (N* P(j))⁻beta  /max weight
-        weights = ((self.current_size * weights) ** -self.beta) / max_weight
+        weights = ((self.current_size * weights) ** (-self.beta)) / max_weight
 
         return (states, actions, rewards, n_next_states, dones), weights, indices
 

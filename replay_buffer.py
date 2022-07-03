@@ -101,23 +101,28 @@ class PrioritizedBuffer(Buffer):
 
         self.initial_max_priority = conf.per_initial_max_priority
 
-        self.tree = SumMinMaxTree(size)
+        self.tree = SumMinMaxTree(self.memory_size)
         self.tree_idx = 0
 
     def add(self, state, action, reward, done):
-        super().add(state, action, reward, done)
-
-        if self.current_size > self.n_step_returns:
+        if self.current_size >= self.n_step_returns:
             # set the priority of the new experience
             # take the max priority of all experiences
             max_priority = self.tree.max()
-            if max_priority == -np.inf:
+            if max_priority <= 0:
                 # when the buffer is empty, just use value 1.0
                 max_priority = self.initial_max_priority
 
-            # add the experience to the tree
+            # add the nth newest experience to the tree
             self.tree.add(self.tree_idx, max_priority)
-            self.tree_idx = (self.tree_idx + 1) % self.max_size
+
+            # set the priority of the experience which is not part of the memory anymore to 0
+            self.tree.reset_priority(self.idx)
+
+            # increment tree idx
+            self.tree_idx = (self.tree_idx + 1) % self.memory_size
+
+        super().add(state, action, reward, done)
 
         self.beta += self.delta_beta
         if self.beta > self.beta_end:
@@ -146,25 +151,22 @@ class PrioritizedBuffer(Buffer):
         min_probability = self.tree.min() / self.tree.sum()
         max_weight = (self.current_size * min_probability) ** (-self.beta)
 
-        prios = np.empty(batch_size, dtype=np.float32)
+        priorities = np.empty(batch_size, dtype=np.float32)
 
         for i in range(batch_size):
             # get the random priority to sample from the tree
             sample_priority = random.random() * batch_range + i * batch_range
 
             # sample from the tree
-            tree_idx, priority = self.tree.sample(sample_priority)
-
-            # get the corresponding index for the memory
-            indices[i] = self.tree_idx_to_idx(tree_idx)
+            indices[i], priority = self.tree.sample(sample_priority)
 
             # store priorities
-            prios[i] = priority
+            priorities[i] = priority
 
         # get experiences from indices
         states, actions, rewards, dones, n_next_states = self.get_experiences(indices)
 
-        weights = torch.from_numpy(prios).to(self.device)
+        weights = torch.from_numpy(priorities).to(self.device)
 
         # get probabilities from priorities
         weights /= self.tree.sum()
@@ -175,12 +177,6 @@ class PrioritizedBuffer(Buffer):
 
         return (states, actions, rewards, n_next_states, dones), weights, indices
 
-    def idx_to_tree_idx(self, idx):
-        return (self.tree_idx + (idx - self.idx) % self.memory_size) % self.max_size
-
-    def tree_idx_to_idx(self, tree_idx):
-        return (self.idx + (tree_idx - self.tree_idx) % self.max_size) % self.memory_size
-
     def set_prio(self, idx, priority):
         """
         :param idx (int): index of the experience
@@ -188,7 +184,7 @@ class PrioritizedBuffer(Buffer):
         """
         assert priority is not math.nan
         assert priority > 0
-        self.tree.set_priority(self.idx_to_tree_idx(idx), priority ** self.alpha)
+        self.tree.set_priority(idx, priority ** self.alpha)
 
     def save(self, file_name):
         super().save(file_name)
@@ -224,12 +220,11 @@ class SumMinMaxTree:
     def add(self, data_index, priority):
         self.set_priority(data_index, priority)
 
-    def set_priority(self, data_index, priority):
-        assert not math.isnan(priority)
+    def _set_priority(self, data_index, sum_priority, min_priority, max_priority):
         current_index = data_index + self.data_index_offset
-        self.sum_array[current_index] = priority
-        self.min_array[current_index] = priority
-        self.max_array[current_index] = priority
+        self.sum_array[current_index] = sum_priority
+        self.min_array[current_index] = min_priority
+        self.max_array[current_index] = max_priority
         current_index = (current_index - 1) // 2
 
         while current_index >= 0:
@@ -239,6 +234,13 @@ class SumMinMaxTree:
             self.max_array[current_index] = max(self.max_array[child_index], self.max_array[child_index + 1])
 
             current_index = (current_index - 1) // 2
+
+    def set_priority(self, data_index, priority):
+        assert not math.isnan(priority)
+        self._set_priority(data_index, priority, priority, priority)
+
+    def reset_priority(self, data_index):
+        self._set_priority(data_index, 0, np.inf, -np.inf)
 
     def sample(self, sample_priority):
         # add 1e-6 to account for floating point errors

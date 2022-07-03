@@ -241,7 +241,8 @@ class SumMinMaxTree:
             current_index = (current_index - 1) // 2
 
     def sample(self, sample_priority):
-        assert 0 <= sample_priority <= self.sum()
+        # add 1e-6 to account for floating point errors
+        assert 0 <= sample_priority <= self.sum() + 1e-6
 
         current_index = 0
         while current_index < self.data_index_offset:

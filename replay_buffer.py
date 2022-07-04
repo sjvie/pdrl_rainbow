@@ -182,7 +182,7 @@ class PrioritizedBuffer(Buffer):
         :param idx (int): index of the experience
         :param priority (float): new priority of the experience. Alpha hyperparameter is applied in this method
         """
-        assert priority is not math.nan
+        assert not math.isnan(priority)
         assert priority > 0
         self.tree.set_priority(idx, priority ** self.alpha)
 

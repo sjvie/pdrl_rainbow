@@ -14,8 +14,8 @@ class Model(nn.Module):
         self.use_distributed = conf.use_distributed
         self.use_noisy = conf.use_noisy
 
-        self.softmax = nn.Softmax(dim=1)
-        self.log_softmax = nn.LogSoftmax(dim=1)
+        self.softmax = nn.Softmax(dim=-1)
+        self.log_softmax = nn.LogSoftmax(dim=-1)
 
         self.conv = nn.Sequential(
             nn.Conv2d(in_channels=conv_channels, out_channels=32, kernel_size=8, stride=4, device=device),
@@ -52,13 +52,9 @@ class Model(nn.Module):
             layer(in_features=512, out_features=action_space * self.num_atoms, device=device),
         )
 
+    def forward(self, x, dist=True, z_support=None):
+        assert dist or z_support is not None
 
-    def forward(self, x, log=False):
-        """
-        :param x (Tensor): input of the model. Tensor of dim [input_dim]
-        :param log (boolean): whether to calculate the softmax with or without log
-        :return (Tensor): output of the model. Tensor of dim [action_space, num_atoms]
-        """
         # convolutional layers
         c = self.conv(x)
         c = c.view(-1, self.conv_output_size)
@@ -69,24 +65,25 @@ class Model(nn.Module):
         # advantage stream (linear layers)
         advantage = self.advantage(c)
 
-        if self.use_distributed:
-            # convert one dimensional tensor to two dimensions
-            advantage = advantage.view(-1, self.action_space, self.num_atoms)
+        # convert one dimensional tensor to two dimensions
+        advantage = advantage.view(-1, self.action_space, self.num_atoms)
 
-            value = value.view(-1, 1, self.num_atoms)
+        value = value.view(-1, 1, self.num_atoms)
 
-            # combine value and advantage stream
-            Q_dist = value + advantage - advantage.mean(dim=1, keepdim=True)
-            Q_dist = Q_dist.squeeze()
+        # combine value and advantage stream
+        Q_dist = value + advantage - advantage.mean(dim=1, keepdim=True)
+        #Q_dist = Q_dist.squeeze()
 
-            # apply softmax (with or without log)
-            if log:
-                return self.log_softmax(Q_dist)
-            else:
-                return self.softmax(Q_dist)
+        if not dist:
+            Q = (Q_dist * z_support).sum(-1)
         else:
-            q_values = value + (advantage - advantage.mean())
-            return q_values
+            Q = Q_dist
+
+        if self.use_distributed and dist:
+            # apply softmax
+            return self.softmax(Q)
+        else:
+            return Q
 
 
 class NoisyLinear(nn.Module):

@@ -5,53 +5,52 @@ from torch.nn import functional as F
 def get_huber_loss(agent, states, actions, rewards, n_next_states, dones):
     with torch.no_grad():
         # compute next Q-value using target_network
-        next_q_values = agent.target_model(n_next_states)
+        q_online_next = agent.target_model(n_next_states, dist=False, z_support=agent.z_support)
 
         # take action with highest q_value, _ gets the indices of the max value
-        next_q_values, _ = next_q_values.max(dim=1)
+        a_star = torch.argmax(q_online_next, dim=-1)
+        #next_q_values_a, _ = next_q_values.max(dim=1)
 
-        # avoid broadcast issue /just to be sure
-        next_q_values = next_q_values.reshape(-1, 1)
+        q_target = agent.target_model(n_next_states, dist=False, z_support=agent.z_support)
+        q_target_a_star = q_target[range(agent.batch_size), a_star]
 
-        rewards = rewards.unsqueeze(-1)
-        target_q_values = rewards + (1 - dones.unsqueeze(1)) * agent.discount_factor * next_q_values
+        #rewards = rewards.unsqueeze(-1)
+        target_q_values = rewards + (1 - dones) * agent.discount_factor * q_target_a_star
 
-    current_q_values = agent.online_model(states)
-    # ToDO: why does this work?!?
-    current_q_values = current_q_values.gather(1, actions.unsqueeze(-1))
+    q_online = agent.online_model(states, dist=False, z_support=agent.z_support)
+    current_q_values = q_online[range(agent.batch_size), actions]
 
     # use Huberloss for error clipping, prevents exploding gradients
     loss = F.huber_loss(current_q_values, target_q_values, reduction="none")
-    return loss
+
+    td_error = current_q_values - (rewards + agent.discount_factor * target_q_values)
+    priorities = abs(td_error).clamp(min=agent.replay_buffer_prio_offset)
+
+    return loss, priorities
 
 
 def get_distributional_loss(agent, states, actions, rewards, n_next_states, dones):
     # initialize target distribution matrix
     m = torch.zeros(agent.batch_size, agent.num_atoms, device=agent.device)
 
-    # logarithmic output of online model for states
-    # shape (batch_size, action_space, num_atoms)
-    log_q_dist = agent.online_model.forward(states, log=True)
-    log_q_dist_a = log_q_dist[range(agent.batch_size), actions]
-
     with torch.no_grad():
-        # non-logarithmic output of online model for n next states
-        q_online = agent.online_model(n_next_states)
+        # output of online model for n next states
+        q_online = agent.online_model(n_next_states, dist=False, z_support=agent.z_support)
 
         # get best actions for next states according to online model
         # a* = argmax_a(sum_i(z_i *p_i(x_{t+1},a)))
-        a_star = torch.argmax((q_online * agent.z_support).sum(-1), dim=1)
+        a_star = torch.argmax(q_online, dim=-1)
 
         # Double DQN part
-        # non-logarithmic output of target model for n next states
-        q_target = agent.target_model.forward(n_next_states)
+        # output of target model for n next states
+        q_target = agent.target_model(n_next_states, dist=True)
 
         # get distributions for action a* selected by online model
         next_dist = q_target[range(agent.batch_size), a_star]
 
         # Tz = r + gamma*(1-done)*z
-        T_z = rewards.unsqueeze(-1) + torch.outer(agent.discount_factor ** agent.n_step_returns * (1 - dones),
-                                                  agent.z_support)
+        T_z = rewards.unsqueeze(-1) + torch.outer(1 - dones,
+                                                  (agent.discount_factor ** agent.n_step_returns) * agent.z_support)
 
         # eingrenzen der Werte
         T_z = T_z.clamp(min=agent.v_min, max=agent.v_max)
@@ -76,9 +75,30 @@ def get_distributional_loss(agent, states, actions, rewards, n_next_states, done
         m.view(-1).index_add_(0, l.view(-1) + agent.index_offset, l_add.view(-1))
         m.view(-1).index_add_(0, l.view(-1) + agent.index_offset, same_add.view(-1))
 
+    # output of online model for states
+    # shape (batch_size, action_space, num_atoms)
+    q_dist = agent.online_model(states, dist=True)
+    q_dist_a = q_dist[range(agent.batch_size), actions]
+
     # get Kullbeck-Leibler divergence of target and approximating distribution
     # the KL divergence calculation has some issues as parts of m can be 0.
     # this makes the log(m) = -inf and loss = nan
-    # loss = torch.sum(m * torch.log(m) - m * log_q_dist, dim=-1) # KL divergence
-    loss = - torch.sum(m * log_q_dist_a, dim=-1)  # cross entropy
-    return loss
+
+    # KL divergence does not work when values of the distribution are 0
+    # m = m.clamp(min=1e-9)
+
+    # loss = (m * (m / q_dist_a).log()).sum(dim=-1)  # KL divergence
+
+    # loss = torch.sum(m * torch.log(m) - m * q_dist_a, dim=-1)  # KL divergence (is it though?)
+    loss = cross_entropy(m, q_dist_a)  # cross entropy
+
+    assert not (loss < 0).any()
+    assert not torch.isnan(loss).any()
+
+    priorities = loss.clamp(min=agent.replay_buffer_prio_offset)
+
+    return loss, priorities
+
+
+def cross_entropy(target_dist, pred_dist):
+    return -torch.sum(target_dist * pred_dist.log(), dim=-1)

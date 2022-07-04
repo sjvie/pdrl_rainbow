@@ -60,6 +60,8 @@ class Agent:
             self.get_loss = loss_functions.get_distributional_loss
         else:
             self.get_loss = loss_functions.get_huber_loss
+            self.num_atoms = 1
+            self.z_support = torch.tensor([1], device=self.device)
 
         if self.use_per:
             self.replay_buffer = PrioritizedBuffer(self.replay_buffer_size,
@@ -122,7 +124,7 @@ class Agent:
         states = states / 255.0
         n_next_states = n_next_states / 255.0
 
-        loss = self.get_loss(self, states, actions, rewards, n_next_states, dones)
+        loss, priorities = self.get_loss(self, states, actions, rewards, n_next_states, dones)
 
         loss = loss.squeeze()
         loss_copy = loss.clone()
@@ -131,7 +133,7 @@ class Agent:
         if self.use_per:
             for i in range(self.batch_size):
                 # in the PER paper they used a small constant to prevent that the loss is 0
-                self.replay_buffer.set_prio(idxs[i].item(), abs(loss[i].item()) + self.replay_buffer_prio_offset)
+                self.replay_buffer.set_prio(idxs[i].item(), priorities[i].item())
             loss = loss * weights
 
         # use the average loss of the batch
@@ -157,20 +159,8 @@ class Agent:
 
             state = state / 255.0
             with torch.no_grad():
-                if self.use_distributed:
-
-                    # select action using online model
-                    Q_dist = self.online_model(state)
-
-                    # get expected Q values
-                    Q = (Q_dist * self.z_support).sum(dim=1)
-
-                    # get action_index with maximum Q value
-                    action_index = torch.argmax(Q)
-                else:
-                    Q = self.online_model(state)
-                    # get action_index with maximum Q value
-                    action_index = torch.argmax(Q, dim=-1)
+                Q = self.online_model(state, dist=False, z_support=self.z_support)
+                action_index = torch.argmax(Q, dim=-1)
 
             # return the index of the action
             return action_index.item()

@@ -9,12 +9,10 @@ def get_huber_loss(agent, states, actions, rewards, n_next_states, dones):
 
         # take action with highest q_value, _ gets the indices of the max value
         a_star = torch.argmax(q_online_next, dim=-1)
-        #next_q_values_a, _ = next_q_values.max(dim=1)
 
         q_target = agent.target_model(n_next_states, dist=False, z_support=agent.z_support)
         q_target_a_star = q_target[range(agent.batch_size), a_star]
 
-        #rewards = rewards.unsqueeze(-1)
         target_q_values = rewards + (1 - dones) * agent.discount_factor * q_target_a_star
 
     q_online = agent.online_model(states, dist=False, z_support=agent.z_support)
@@ -23,7 +21,7 @@ def get_huber_loss(agent, states, actions, rewards, n_next_states, dones):
     # use Huberloss for error clipping, prevents exploding gradients
     loss = F.huber_loss(current_q_values, target_q_values, reduction="none")
 
-    td_error = current_q_values - (rewards + agent.discount_factor * target_q_values)
+    td_error = (rewards + agent.discount_factor * target_q_values) - current_q_values
     priorities = abs(td_error).clamp(min=agent.replay_buffer_prio_offset)
 
     return loss, priorities

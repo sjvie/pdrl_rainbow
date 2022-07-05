@@ -9,6 +9,8 @@ from agent import Agent
 import gym
 import numpy as np
 
+from env_wrappers import CartPoleObservationWrapper
+
 agent_load_path = "agent/30"
 log_file_name = "log_00.txt"
 config_settings = sys.argv[1]
@@ -43,7 +45,10 @@ def main():
     torch.manual_seed(seed)
 
     # config.config_benchmark()
-    env, observation_shape, action_space = atari()
+    if Config.env_name == "cartpole":
+        env, observation_shape, action_space = cart_pole()
+    else:
+        env, observation_shape, action_space = atari()
     # TODO: what about action repetitions?
     env.seed(seed)
 
@@ -62,6 +67,16 @@ def main():
 
     # agent.load(agent_load_path)
     train.train_agent(agent, env, conf=Config)
+
+
+def cart_pole():
+    env = gym.make("CartPole-v1")
+    env = CartPoleObservationWrapper(env)
+    env = gym.wrappers.ResizeObservation(env, (Config.observation_width, Config.observation_height))
+    env = gym.wrappers.FrameStack(env, Config.frame_stack)
+    observation_shape = (Config.frame_stack, Config.observation_width, Config.observation_height)
+    action_space = env.action_space.n
+    return env, observation_shape, action_space
 
 
 def atari():

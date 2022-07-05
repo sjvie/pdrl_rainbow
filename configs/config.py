@@ -47,7 +47,7 @@ class Config:
     # paper: Prioritization importance sampling beta: 0.4 -> 1.0
     replay_buffer_beta_start = 0.4
     replay_buffer_beta_end = 1.0
-    replay_buffer_beta_annealing_steps = 1000000
+    replay_buffer_beta_annealing_steps = 2000000
 
     # the priority for the first experience in the replay buffer
     per_initial_max_priority = 1.0
@@ -118,7 +118,7 @@ class Config:
     agent_save_path = "agent/"
     log_file = "220613_01.log"
 
-    loss_avg = 50
+    loss_avg = 200
     model_log_freq = 2000
 
     # formatting of the log messages

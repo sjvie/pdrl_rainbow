@@ -7,10 +7,11 @@ import wandb
 def train_agent(agent, env, conf):
     total_frames = 0
     train_frames = 0
-    action_list = np.zeros(agent.action_space)
     reward_list = np.zeros(500, dtype=np.int8)
     loss_list = np.zeros((conf.loss_avg, conf.batch_size), dtype=np.float32)
     weight_list = np.zeros((conf.loss_avg, conf.batch_size), dtype=np.float32)
+    action_amounts = np.zeros((agent.action_space,), dtype=np.int32)
+    action_distribution_log_names = ["action_" + str(x) for x in range(agent.action_space)]
 
     episode = 1
     if conf.num_episodes is not None:
@@ -24,7 +25,7 @@ def train_agent(agent, env, conf):
         agent.run.watch(agent.online_model, log='all', log_freq=conf.model_log_freq)
 
     while (end_episode is None or episode <= end_episode) \
-            and (conf.num_frames is None or total_frames < conf.num_frames)\
+            and (conf.num_frames is None or total_frames < conf.num_frames) \
             and (conf.max_time is None or time.time() < start_time + conf.max_time):
 
         state = env.reset()
@@ -41,7 +42,7 @@ def train_agent(agent, env, conf):
             episode_frames += 1
 
             action = agent.select_action(state)
-            action_list[action] += 1
+            action_amounts[action] += 1
 
             next_state, reward, done, _ = env.step(action)
             next_state = process_state(next_state)
@@ -71,26 +72,19 @@ def train_agent(agent, env, conf):
                                        "buffer_tree_max": agent.replay_buffer.tree.max(),
                                        "frame_weights_avg": weight_list.mean()
                                        }, step=total_frames)
-                        #agent.run.log({"buffer_tree": agent.replay_buffer.tree.sum_array[agent.replay_buffer.tree.data_index_offset:]}, step=total_frames)
+                        # agent.run.log({"buffer_tree": agent.replay_buffer.tree.sum_array[agent.replay_buffer.tree.data_index_offset:]}, step=total_frames)
 
                 # log the loss averaged over loss_avg frames
                 loss_list[train_frames % conf.loss_avg] = loss
                 if conf.use_per:
                     weight_list[train_frames % conf.loss_avg] = weights
 
-                #agent.run.log({"mean_loss_over_time": loss.item()})
                 episode_loss += loss.sum()
                 train_frames += 1
 
             if total_frames > conf.start_learning_after and total_frames % conf.target_model_period == 0:
                 agent.update_target_model()
                 logging.debug("Updated target model")
-
-            """column=[i for i in range(agent.action_space)]
-            data = [action_list]
-            table=wandb.Table(data=data,columns=column)
-            agent.run.log({"actions": table})
-            """
 
             state = next_state
             episode_over = done
@@ -110,6 +104,8 @@ def train_agent(agent, env, conf):
             if not conf.use_noisy:
                 agent.run.log({"episode_exploration_rate": agent.epsilon}, step=total_frames)
             agent.run.log({"episode_length": episode_frames}, step=total_frames)
+            action_distribution_dict = dict(zip(action_distribution_log_names, action_amounts / action_amounts.sum()))
+            agent.run.log(action_distribution_dict, step=total_frames)
 
         reward_list[episode % 500] = episode_reward
         if conf.log_episode_end:
@@ -125,30 +121,30 @@ def train_agent(agent, env, conf):
                 logging.info(
                     '[AVERAGE] | Avg. reward: {:.2f} | Actiondistribution 0: {:.2f} 1: {:.2f} 2: {:.2f} 3: {:.2f} 4:{:.2f} 5:{:.2f}'.format(
                         reward_list.mean(),
-                        action_list[0] / action_list.sum(),
-                        action_list[1] / action_list.sum(),
-                        action_list[2] / action_list.sum(),
-                        action_list[3] / action_list.sum(),
-                        action_list[4] / action_list.sum(),
-                        action_list[5] / action_list.sum())
+                        action_amounts[0] / action_amounts.sum(),
+                        action_amounts[1] / action_amounts.sum(),
+                        action_amounts[2] / action_amounts.sum(),
+                        action_amounts[3] / action_amounts.sum(),
+                        action_amounts[4] / action_amounts.sum(),
+                        action_amounts[5] / action_amounts.sum())
                 )
             if agent.action_space == 3:
                 logging.info(
                     '[AVERAGE] | Avg. reward: {:.2f} | Actiondistribution 0: {:.2f} 1: {:.2f} 2: {:.2f}'.format(
-                        reward_list.mean(), action_list[0],
-                        action_list[1],
-                        action_list[2])
+                        reward_list.mean(), action_amounts[0],
+                        action_amounts[1],
+                        action_amounts[2])
                 )
             if agent.action_space == 4:
                 logging.info(
                     '[AVERAGE] | Avg. reward: {:.2f} | Actiondistribution 0: {:.2f} 1: {:.2f} 2: {:.2f} 3: {:.2f}'.format(
                         reward_list.mean(),
-                        action_list[0],
-                        action_list[1],
-                        action_list[2],
-                        action_list[3])
+                        action_amounts[0],
+                        action_amounts[1],
+                        action_amounts[2],
+                        action_amounts[3])
                 )
-            action_list = np.zeros(agent.action_space)
+            action_amounts.fill(0)
 
         if episode % conf.save_agent_per_episodes == 0 and episode > 0:
             agent.save(conf.agent_save_path + str(episode))

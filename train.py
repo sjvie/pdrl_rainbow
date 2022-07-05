@@ -103,6 +103,8 @@ def train_agent(agent, env, conf):
             agent.run.log({"episode_reward": episode_reward}, step=total_frames)
             if not conf.use_noisy:
                 agent.run.log({"episode_exploration_rate": agent.epsilon}, step=total_frames)
+            if conf.use_per:
+                agent.run.log({"episode_per_beta": agent.replay_buffer.beta}, step=total_frames)
             agent.run.log({"episode_length": episode_frames}, step=total_frames)
             action_distribution_dict = dict(zip(action_distribution_log_names, action_amounts / action_amounts.sum()))
             agent.run.log(action_distribution_dict, step=total_frames)

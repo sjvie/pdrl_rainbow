@@ -28,6 +28,8 @@ elif config_settings == 'distributed':
     from configs.distributed_normal import Config
 elif config_settings == 'no_noisy':
     from configs.no_noisy_config import Config
+elif config_settings == 'multistep':
+    from configs.multistep_config import Config
 elif config_settings == 'test':
     from configs.test_config import Config
 else:

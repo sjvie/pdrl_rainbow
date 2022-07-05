@@ -56,26 +56,27 @@ def train_agent(agent, env, conf):
             if total_frames > conf.start_learning_after and total_frames % conf.replay_period == 0:
                 loss, weights = agent.train()
                 loss = loss.cpu().detach().numpy()
-                #loss = loss.mean()
                 if conf.use_per:
                     weights = weights.cpu().detach().numpy()
-                #    weights = weights.mean()
 
                 if conf.log_wandb and train_frames % conf.loss_avg == 0 and train_frames >= conf.loss_avg:
-                    agent.run.log({"frame_loss_avg": loss_list.mean()}, step=total_frames)
-                    agent.run.log({"frame_loss_min": loss_list.min()}, step=total_frames)
-                    agent.run.log({"frame_loss_max": loss_list.max()}, step=total_frames)
+                    agent.run.log({"frame_loss_avg": loss_list.mean(),
+                                   "frame_loss_min": loss_list.min(),
+                                   "frame_loss_max": loss_list.max()
+                                   }, step=total_frames)
                     # todo TMP
                     if conf.use_per:
-                        agent.run.log({"frame_weights_avg": weight_list.mean()}, step=total_frames)
-                        agent.run.log({"buffer_tree_sum": agent.replay_buffer.tree.sum()}, step=total_frames)
-                        agent.run.log({"buffer_tree_min": agent.replay_buffer.tree.min()}, step=total_frames)
-                        agent.run.log({"buffer_tree_max": agent.replay_buffer.tree.max()}, step=total_frames)
+                        agent.run.log({"buffer_tree_sum": agent.replay_buffer.tree.sum(),
+                                       "buffer_tree_min": agent.replay_buffer.tree.min(),
+                                       "buffer_tree_max": agent.replay_buffer.tree.max(),
+                                       "frame_weights_avg": weight_list.mean()
+                                       }, step=total_frames)
                         #agent.run.log({"buffer_tree": agent.replay_buffer.tree.sum_array[agent.replay_buffer.tree.data_index_offset:]}, step=total_frames)
 
                 # log the loss averaged over loss_avg frames
                 loss_list[train_frames % conf.loss_avg] = loss
-                weight_list[train_frames % conf.loss_avg] = weights
+                if conf.use_per:
+                    weight_list[train_frames % conf.loss_avg] = weights
 
                 #agent.run.log({"mean_loss_over_time": loss.item()})
                 episode_loss += loss.sum()

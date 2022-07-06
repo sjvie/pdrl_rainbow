@@ -9,7 +9,7 @@ from agent import Agent
 import gym
 import numpy as np
 
-from env_wrappers import CartPoleObservationWrapper
+from env_wrappers import CartPoleImageObservationWrapper, CartPoleIntObservationWrapper
 
 agent_load_path = "agent/30"
 log_file_name = "log_00.txt"
@@ -24,16 +24,18 @@ elif config_settings == 'noisy_per':
     from configs.noisy_per_config import Config
 elif config_settings == 'noisy':
     from configs.noisy_config import Config
-elif config_settings == 'distributed_per':
-    from configs.distributed_per_config import Config
-elif config_settings == 'distributed':
-    from configs.distributed_normal import Config
+elif config_settings == 'distributional_per':
+    from configs.distributional_per_config import Config
+elif config_settings == 'distributional_noisy':
+    from configs.distributional_noisy_config import Config
+elif config_settings == 'distributional':
+    from configs.distributional_config import Config
 elif config_settings == 'no_noisy':
     from configs.no_noisy_config import Config
 elif config_settings == 'multistep':
     from configs.multistep_config import Config
 elif config_settings == 'multistep_noisy':
-    from configs.multistep_noisy import Config
+    from configs.multistep_noisy_config import Config
 elif config_settings == 'test':
     from configs.test_config import Config
 else:
@@ -51,6 +53,7 @@ def main():
         env, observation_shape, action_space = cart_pole()
     else:
         env, observation_shape, action_space = atari()
+
     # TODO: what about action repetitions?
     env.seed(seed)
 
@@ -73,10 +76,12 @@ def main():
 
 def cart_pole():
     env = gym.make("CartPole-v1")
-    env = CartPoleObservationWrapper(env)
-    env = gym.wrappers.ResizeObservation(env, (Config.observation_width, Config.observation_height))
-    env = gym.wrappers.FrameStack(env, Config.frame_stack)
-    observation_shape = (Config.frame_stack, Config.observation_width, Config.observation_height)
+    #env = CartPoleIntObservationWrapper(env)
+    # env = gym.wrappers.ResizeObservation(env, (Config.observation_width, Config.observation_height))
+    # env = gym.wrappers.FrameStack(env, Config.frame_stack)
+
+    Config.obs_dtype = torch.float32
+    observation_shape = env.observation_space.shape
     action_space = env.action_space.n
     return env, observation_shape, action_space
 
@@ -89,6 +94,7 @@ def atari():
         env = gym.wrappers.RecordVideo(env, Config.save_video_folder,
                                        episode_trigger=lambda x: x % Config.save_video_per_episodes == 0)
 
+    Config.obs_dtype = torch.uint8
     observation_shape = (Config.frame_stack, Config.observation_width, Config.observation_height)
     action_space = env.action_space.n
 

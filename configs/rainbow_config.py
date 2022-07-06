@@ -7,4 +7,4 @@ class Config(config.Config):
     use_per = True
     multi_step_n = 3
     use_noisy = True
-    use_distributed = True
+    use_distributional = True

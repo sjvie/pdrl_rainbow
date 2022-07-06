@@ -10,6 +10,6 @@ class Config(config.Config):
     use_per = False
     multi_step_n = 1
     use_noisy = True
-    use_distributed = False
+    use_distributional = False
 
     clip_reward = False

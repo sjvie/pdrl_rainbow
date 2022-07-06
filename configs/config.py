@@ -73,7 +73,7 @@ class Config:
     use_noisy = True
 
     # whether to use distributed rl
-    use_distributed = True
+    use_distributional = True
 
     # if noisy is false, you must consider epsilon greedy as exploration strategy (for now)
     epsilon_start = 1
@@ -87,6 +87,7 @@ class Config:
     #######
 
     env_name = "ALE/Breakout-v5"
+    use_conv = True
 
     # maximum amount of episodes to train for (inf if None)
     num_episodes = None

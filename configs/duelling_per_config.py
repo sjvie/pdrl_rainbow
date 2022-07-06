@@ -10,7 +10,7 @@ class Config(config.Config):
     use_per = True
     multi_step_n = 1
     use_noisy = False
-    use_distributed = False
+    use_distributional = False
 
     epsilon_start = 1
     epsilon_end = 0.01

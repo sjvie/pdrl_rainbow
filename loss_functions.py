@@ -21,7 +21,7 @@ def get_huber_loss(agent, states, actions, rewards, n_next_states, dones):
     # use Huberloss for error clipping, prevents exploding gradients
     loss = F.huber_loss(current_q_values, target_q_values, reduction="none")
 
-    td_error = (rewards + agent.discount_factor * target_q_values) - current_q_values
+    td_error = target_q_values - current_q_values
     priorities = abs(td_error).clamp(min=agent.replay_buffer_prio_offset)
 
     return loss, priorities
@@ -84,6 +84,7 @@ def get_distributional_loss(agent, states, actions, rewards, n_next_states, done
 
     # KL divergence does not work when values of the distribution are 0
     # m = m.clamp(min=1e-9)
+    # m /= m.sum(-1, keepdim=True)
 
     # loss = (m * (m / q_dist_a).log()).sum(dim=-1)  # KL divergence
 

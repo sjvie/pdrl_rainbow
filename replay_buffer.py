@@ -17,7 +17,7 @@ class Buffer:
 
         self.memory_size = size + self.n_step_returns
 
-        self.state_memory = torch.zeros((self.memory_size,) + observation_shape, dtype=torch.uint8,
+        self.state_memory = torch.zeros((self.memory_size,) + observation_shape, dtype=conf.obs_dtype,
                                         device=self.device)
         self.action_memory = torch.zeros(self.memory_size, dtype=torch.uint8, device=self.device)
         self.reward_memory = torch.zeros(self.memory_size, dtype=torch.float32, device=self.device)

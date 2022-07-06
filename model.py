@@ -6,38 +6,43 @@ import torch
 
 class Model(nn.Module):
 
-    def __init__(self, conv_channels, action_space, device, conf):
+    def __init__(self, action_space, device, conf, conv_channels=None, input_features=None):
         super().__init__()
 
         self.action_space = action_space
         self.num_atoms = conf.distributional_atoms
-        self.use_distributed = conf.use_distributed
+        self.use_distributional = conf.use_distributional
         self.use_noisy = conf.use_noisy
 
         self.softmax = nn.Softmax(dim=-1)
         self.log_softmax = nn.LogSoftmax(dim=-1)
 
-        self.conv = nn.Sequential(
-            nn.Conv2d(in_channels=conv_channels, out_channels=32, kernel_size=8, stride=4, device=device),
-            nn.ReLU(),
-            nn.Conv2d(in_channels=32, out_channels=64, kernel_size=4, stride=2, device=device),
-            nn.ReLU(),
-            nn.Conv2d(in_channels=64, out_channels=64, kernel_size=3, stride=1, device=device),
-            nn.ReLU()
-        )
+        self.use_conv = conf.use_conv
+
+        if conf.use_conv:
+            self.conv = nn.Sequential(
+                nn.Conv2d(in_channels=conv_channels, out_channels=32, kernel_size=8, stride=4, device=device),
+                nn.ReLU(),
+                nn.Conv2d(in_channels=32, out_channels=64, kernel_size=4, stride=2, device=device),
+                nn.ReLU(),
+                nn.Conv2d(in_channels=64, out_channels=64, kernel_size=3, stride=1, device=device),
+                nn.ReLU()
+            )
+            # the size of the output of the convolutional layer
+            # 64 * 7 * 7
+            self.conv_output_size = 3136
+        else:
+            self.conv = nn.Linear(in_features=input_features, out_features=128, device=device)
+            self.conv_output_size = 128
 
         sigma_zero = conf.noisy_sigma_zero
-
-        # the size of the output of the convolutional layer
-        # 64 * 7 * 7 TODO: checken ob das richtig ist
-        self.conv_output_size = 3136
 
         if self.use_noisy:
             layer = functools.partial(NoisyLinear, sigma_zero=sigma_zero)
         else:
             layer = nn.Linear
 
-        if not self.use_distributed:
+        if not self.use_distributional:
             self.num_atoms = 1
 
         self.value = nn.Sequential(
@@ -79,7 +84,7 @@ class Model(nn.Module):
         else:
             Q = Q_dist
 
-        if self.use_distributed and dist:
+        if self.use_distributional and dist:
             # apply softmax
             return self.softmax(Q)
         else:

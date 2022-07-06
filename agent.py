@@ -18,6 +18,8 @@ class Agent:
     def __init__(self, observation_shape, action_space, device, seed, conf):
         self.action_space = action_space
         self.conv_channels = conf.frame_stack
+        self.input_features = observation_shape[0]
+
         self.batch_size = conf.batch_size
         self.num_atoms = conf.distributional_atoms
         self.device = device
@@ -41,10 +43,10 @@ class Agent:
         self.replay_buffer_beta_start = conf.replay_buffer_beta_start
         self.replay_buffer_alpha = conf.replay_buffer_alpha
         self.replay_buffer_size = conf.replay_buffer_size
-        self.use_distributed = conf.use_distributed
+        self.use_distributional = conf.use_distributional
 
-        self.online_model = Model(self.conv_channels, self.action_space, device, conf)
-        self.target_model = Model(self.conv_channels, self.action_space, device, conf)
+        self.online_model = Model(action_space=self.action_space, device=device, conf=conf, conv_channels=self.conv_channels, input_features=self.input_features)
+        self.target_model = Model(action_space=self.action_space, device=device, conf=conf, conv_channels=self.conv_channels, input_features=self.input_features)
         self.target_model.load_state_dict(self.online_model.state_dict())
 
         self.optimizer = torch.optim.Adam(self.online_model.parameters(),
@@ -56,7 +58,7 @@ class Agent:
 
         self.replay_buffer_beta = self.replay_buffer_beta_start
 
-        if self.use_distributed:
+        if self.use_distributional:
             self.get_loss = loss_functions.get_distributional_loss
         else:
             self.get_loss = loss_functions.get_huber_loss
@@ -97,7 +99,7 @@ class Agent:
                                       "clip_reward": conf.clip_reward,
                                       "seed": self.seed,
                                       "use_per": conf.use_per,
-                                      "use_distributed": conf.use_distributed,
+                                      "use_distributed": conf.use_distributional,
                                       "multi_step_n": conf.multi_step_n,
                                       "use_noisy": conf.use_noisy,
                                       "loss_avg": conf.loss_avg,
@@ -121,8 +123,9 @@ class Agent:
         actions = actions.long()
         dones = dones.long()
 
-        states = states / 255.0
-        n_next_states = n_next_states / 255.0
+        if states.dtype == torch.uint8:
+            states = states / 255.0
+            n_next_states = n_next_states / 255.0
 
         loss, priorities = self.get_loss(self, states, actions, rewards, n_next_states, dones)
 
@@ -157,7 +160,8 @@ class Agent:
         if random.random() > self.epsilon or self.use_noisy:
             state = torch.from_numpy(np_state).to(self.device)
 
-            state = state / 255.0
+            if state.dtype == torch.uint8:
+                state = state / 255.0
             with torch.no_grad():
                 Q = self.online_model(state, dist=False, z_support=self.z_support)
                 action_index = torch.argmax(Q, dim=-1)

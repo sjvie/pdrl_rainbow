@@ -98,6 +98,10 @@ class Config:
     # maximum time to train (seconds) (inf if None)
     max_time = None
 
+    # the maximum amount of no-ops inserted at the beginning of each episode
+    # paper: up to 30
+    max_noops = 30
+
     # paper: Min history to start learning: 80K frames
     start_learning_after = 80000
 

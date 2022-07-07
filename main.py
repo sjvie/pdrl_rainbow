@@ -47,30 +47,33 @@ def main():
     if Config.seed is None:
         Config.seed = random.randint(0, 1000)
 
+    # set seeds for all pseudo-random number generators
     np.random.seed(Config.seed)
     torch.manual_seed(Config.seed)
     random.seed(Config.seed)
 
+    # CUDA uses non-deterministic methods by default
+    # when toggled on in the config, CUDA is set to only use deterministic methods, reducing performance
     if Config.cuda_deterministic:
         if torch.backends.cudnn.enabled:
             torch.backends.cudnn.benchmark = False
             torch.backends.cudnn.deterministic = True
 
-    # config.config_benchmark()
     if Config.env_name == "cartpole":
         env, observation_shape, action_space = cart_pole()
     else:
         env, observation_shape, action_space = atari()
 
-    # TODO: what about action repetitions?
-    #env.seed(Config.seed)
+    # env.seed(Config.seed)
 
     logging.info("Cuda available: %s" % torch.cuda.is_available())
     logging.info("actionspace: %s" % action_space)
     logging.info("seed: %s" % Config.seed)
     logging.info("spec: %s" % env.spec)
 
+    # get the correct device (either CUDA or CPU)
     device = torch.device(Config.gpu_device_name if torch.cuda.is_available() else Config.cpu_device_name)
+
     agent = Agent(observation_shape,
                   action_space,
                   device,
@@ -83,7 +86,7 @@ def main():
 
 def cart_pole():
     env = gym.make("CartPole-v1")
-    #env = CartPoleIntObservationWrapper(env)
+    # env = CartPoleIntObservationWrapper(env)
     # env = gym.wrappers.ResizeObservation(env, (Config.observation_width, Config.observation_height))
     # env = gym.wrappers.FrameStack(env, Config.frame_stack)
 
@@ -94,15 +97,28 @@ def cart_pole():
 
 
 def atari():
-    env = gym.make(Config.env_name, obs_type="grayscale", full_action_space=False, repeat_action_probability=0.0)
-    env = gym.wrappers.ResizeObservation(env, (Config.observation_width, Config.observation_height))
+    env = gym.make(Config.env_name,
+                   obs_type="grayscale",
+                   full_action_space=False,
+                   repeat_action_probability=0.0,
+                   frameskip=1
+                   )
+
+    env = gym.wrappers.AtariPreprocessing(env,
+                                          noop_max=Config.max_noops,
+                                          frame_skip=Config.action_repetitions,
+                                          screen_size=Config.observation_width,
+                                          terminal_on_life_loss=True,
+                                          grayscale_obs=True
+                                          )
+    #env = gym.wrappers.ResizeObservation(env, (Config.observation_width, Config.observation_height))
     env = gym.wrappers.FrameStack(env, Config.frame_stack)
     if Config.save_video:
         env = gym.wrappers.RecordVideo(env, Config.save_video_folder,
                                        episode_trigger=lambda x: x % Config.save_video_per_episodes == 0)
 
     Config.obs_dtype = torch.uint8
-    observation_shape = (Config.frame_stack, Config.observation_width, Config.observation_height)
+    observation_shape = (Config.frame_stack, Config.observation_width, Config.observation_width)
     action_space = env.action_space.n
 
     return env, observation_shape, action_space

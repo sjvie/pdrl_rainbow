@@ -158,10 +158,9 @@ class PrioritizedBuffer(Buffer):
             sample_priority = random.random() * batch_range + i * batch_range
 
             # sample from the tree
-            indices[i], priority = self.tree.sample(sample_priority)
+            indices[i], priorities[i] = self.tree.sample(sample_priority)
 
-            # store priorities
-            priorities[i] = priority
+            assert indices[i] < self.tree_idx or indices[i] >= self.idx
 
         # get experiences from indices
         states, actions, rewards, dones, n_next_states = self.get_experiences(indices)

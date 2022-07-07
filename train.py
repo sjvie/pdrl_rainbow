@@ -28,7 +28,7 @@ def train_agent(agent, env, conf):
             and (conf.num_frames is None or total_frames < conf.num_frames) \
             and (conf.max_time is None or time.time() < start_time + conf.max_time):
 
-        state = env.reset()
+        state = env.reset(seed=conf.seed)
         state = process_state(state)
         episode_over = False
         episode_frames = 0

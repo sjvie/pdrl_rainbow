@@ -15,7 +15,7 @@ import copy
 
 class Agent:
 
-    def __init__(self, observation_shape, action_space, device, seed, conf):
+    def __init__(self, observation_shape, action_space, device, conf):
         self.action_space = action_space
         self.conv_channels = conf.frame_stack
         self.input_features = observation_shape[0]
@@ -45,8 +45,10 @@ class Agent:
         self.replay_buffer_size = conf.replay_buffer_size
         self.use_distributional = conf.use_distributional
 
-        self.online_model = Model(action_space=self.action_space, device=device, conf=conf, conv_channels=self.conv_channels, input_features=self.input_features)
-        self.target_model = Model(action_space=self.action_space, device=device, conf=conf, conv_channels=self.conv_channels, input_features=self.input_features)
+        self.online_model = Model(action_space=self.action_space, device=device, conf=conf,
+                                  conv_channels=self.conv_channels, input_features=self.input_features)
+        self.target_model = Model(action_space=self.action_space, device=device, conf=conf,
+                                  conv_channels=self.conv_channels, input_features=self.input_features)
         self.target_model.load_state_dict(self.online_model.state_dict())
 
         self.optimizer = torch.optim.Adam(self.online_model.parameters(),
@@ -54,7 +56,6 @@ class Agent:
                                           eps=self.adam_e)
 
         self.replay_buffer_prio_offset = conf.replay_buffer_prio_offset
-        self.seed = seed
 
         self.replay_buffer_beta = self.replay_buffer_beta_start
 
@@ -97,7 +98,7 @@ class Agent:
                                                   "end": conf.epsilon_end,
                                                   "annealing_steps": conf.epsilon_annealing_steps},
                                       "clip_reward": conf.clip_reward,
-                                      "seed": self.seed,
+                                      "seed": conf.seed,
                                       "use_per": conf.use_per,
                                       "use_distributed": conf.use_distributional,
                                       "multi_step_n": conf.multi_step_n,
@@ -122,6 +123,7 @@ class Agent:
 
         actions = actions.long()
         dones = dones.long()
+        idxs = idxs.long()
 
         if states.dtype == torch.uint8:
             states = states / 255.0

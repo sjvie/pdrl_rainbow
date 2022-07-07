@@ -104,6 +104,12 @@ class Config:
     # paper: Max frames per episode: 108K
     max_frames_per_episode = 108000
 
+    # whether to force cuda to act deterministic
+    cuda_deterministic = False
+
+    # The seed for pseudo-random number generation, if None, a random seed will be selected
+    seed = None
+
     #######
     #       logging config
     #######

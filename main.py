@@ -44,9 +44,17 @@ else:
 
 def main():
     # todo: log stuff
-    seed = random.randint(0, 100)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
+    if Config.seed is None:
+        Config.seed = random.randint(0, 1000)
+
+    np.random.seed(Config.seed)
+    torch.manual_seed(Config.seed)
+    random.seed(Config.seed)
+
+    if Config.cuda_deterministic:
+        if torch.backends.cudnn.enabled:
+            torch.backends.cudnn.benchmark = False
+            torch.backends.cudnn.deterministic = True
 
     # config.config_benchmark()
     if Config.env_name == "cartpole":
@@ -55,18 +63,17 @@ def main():
         env, observation_shape, action_space = atari()
 
     # TODO: what about action repetitions?
-    env.seed(seed)
+    #env.seed(Config.seed)
 
     logging.info("Cuda available: %s" % torch.cuda.is_available())
     logging.info("actionspace: %s" % action_space)
-    logging.info("seed: %s" % seed)
+    logging.info("seed: %s" % Config.seed)
     logging.info("spec: %s" % env.spec)
 
     device = torch.device(Config.gpu_device_name if torch.cuda.is_available() else Config.cpu_device_name)
     agent = Agent(observation_shape,
                   action_space,
                   device,
-                  seed,
                   Config
                   )
 

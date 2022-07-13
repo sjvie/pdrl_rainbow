@@ -18,11 +18,12 @@ def train_agent(agent, env, conf):
         end_episode = episode + conf.num_episodes
     else:
         end_episode = None
-    logging.info("Starting training")
-    start_time = time.time()
 
     if conf.log_wandb:
-        agent.run.watch(agent.online_model, log='all', log_freq=conf.model_log_freq)
+        agent.run.watch(agent.model, log='all', log_freq=conf.model_log_freq)
+
+    logging.info("Starting training")
+    start_time = time.time()
 
     while (end_episode is None or episode <= end_episode) \
             and (conf.num_frames is None or total_frames < conf.num_frames) \
@@ -30,6 +31,7 @@ def train_agent(agent, env, conf):
 
         state = env.reset(seed=conf.seed)
         state = process_state(state)
+
         episode_over = False
         episode_frames = 0
         episode_reward = 0
@@ -51,7 +53,6 @@ def train_agent(agent, env, conf):
                 reward = np.clip(reward, -1, 1)
 
             episode_reward += reward
-            # todo: action repetitions?
             agent.step(state, action, reward, done)
 
             if total_frames > conf.start_learning_after and total_frames % conf.replay_period == 0:
@@ -65,14 +66,12 @@ def train_agent(agent, env, conf):
                                    "frame_loss_min": loss_list.min(),
                                    "frame_loss_max": loss_list.max()
                                    }, step=total_frames)
-                    # todo TMP
                     if conf.use_per:
                         agent.run.log({"buffer_tree_sum": agent.replay_buffer.tree.sum(),
                                        "buffer_tree_min": agent.replay_buffer.tree.min(),
-                                       "buffer_tree_max": agent.replay_buffer.tree.max(),
+                                       "buffer_max_priority_with_alpha": agent.replay_buffer.max_priority ** agent.replay_buffer.alpha,
                                        "frame_weights_avg": weight_list.mean()
                                        }, step=total_frames)
-                        # agent.run.log({"buffer_tree": agent.replay_buffer.tree.sum_array[agent.replay_buffer.tree.data_index_offset:]}, step=total_frames)
 
                 # log the loss averaged over loss_avg frames
                 loss_list[train_frames % conf.loss_avg] = loss
@@ -82,7 +81,9 @@ def train_agent(agent, env, conf):
                 episode_loss += loss.sum()
                 train_frames += 1
 
-            if total_frames > conf.start_learning_after and total_frames % conf.target_model_period == 0:
+            if total_frames > conf.start_learning_after \
+                    and total_frames % conf.target_model_period == 0 \
+                    and conf.use_double:
                 agent.update_target_model()
                 logging.debug("Updated target model")
 
@@ -96,7 +97,7 @@ def train_agent(agent, env, conf):
                                                                                         episode_reward / episode_frames,
                                                                                         episode_loss / episode_frames))
         episode_end_time = time.time()
-        fps = episode_frames / (episode_end_time - episode_start_time)
+        fps = episode_frames / max(episode_end_time - episode_start_time, 0.0001)
 
         if conf.log_wandb:
             agent.run.log({"episode_fps": fps}, step=total_frames)
@@ -146,8 +147,8 @@ def train_agent(agent, env, conf):
                         action_amounts[2],
                         action_amounts[3])
                 )
-            action_amounts.fill(0)
 
+        action_amounts.fill(0)
         if episode % conf.save_agent_per_episodes == 0 and episode > 0:
             agent.save(conf.agent_save_path + str(episode))
 

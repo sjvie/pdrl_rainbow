@@ -2,6 +2,7 @@ import functools
 import math
 import torch.nn as nn
 import torch
+from torch.nn import functional as F
 
 
 class Model(nn.Module):
@@ -13,9 +14,7 @@ class Model(nn.Module):
         self.num_atoms = conf.distributional_atoms
         self.use_distributional = conf.use_distributional
         self.use_noisy = conf.use_noisy
-
-        self.softmax = nn.Softmax(dim=-1)
-        self.log_softmax = nn.LogSoftmax(dim=-1)
+        self.use_dueling = conf.use_dueling
 
         self.use_conv = conf.use_conv
 
@@ -45,50 +44,57 @@ class Model(nn.Module):
         if not self.use_distributional:
             self.num_atoms = 1
 
-        self.value = nn.Sequential(
-            layer(in_features=self.conv_output_size, out_features=512, device=device),
-            nn.ReLU(),
-            layer(in_features=512, out_features=self.num_atoms, device=device),
-        )
+        if self.use_dueling:
+            self.value = nn.Sequential(
+                layer(in_features=self.conv_output_size, out_features=512, device=device),
+                nn.ReLU(),
+                layer(in_features=512, out_features=self.num_atoms, device=device),
+            )
 
-        self.advantage = nn.Sequential(
-            layer(in_features=self.conv_output_size, out_features=512, device=device),
-            nn.ReLU(),
-            layer(in_features=512, out_features=action_space * self.num_atoms, device=device),
-        )
+            self.advantage = nn.Sequential(
+                layer(in_features=self.conv_output_size, out_features=512, device=device),
+                nn.ReLU(),
+                layer(in_features=512, out_features=action_space * self.num_atoms, device=device),
+            )
+        else:
+            self.final_layers = nn.Sequential(
+                layer(in_features=self.conv_output_size, out_features=512, device=device),
+                nn.ReLU(),
+                layer(in_features=512, out_features=action_space * self.num_atoms, device=device)
+            )
 
-    def forward(self, x, dist=True, z_support=None):
-        assert dist or z_support is not None
+    def forward(self, x, log):
 
         # convolutional layers
         c = self.conv(x)
         c = c.view(-1, self.conv_output_size)
 
-        # value stream (linear layers)
-        value = self.value(c)
+        if self.use_dueling:
+            # value stream (linear layers)
+            value = self.value(c)
 
-        # advantage stream (linear layers)
-        advantage = self.advantage(c)
+            # advantage stream (linear layers)
+            advantage = self.advantage(c)
 
-        # convert one dimensional tensor to two dimensions
-        advantage = advantage.view(-1, self.action_space, self.num_atoms)
+            # convert one dimensional tensor to two dimensions
+            advantage = advantage.view(-1, self.action_space, self.num_atoms)
 
-        value = value.view(-1, 1, self.num_atoms)
+            value = value.view(-1, 1, self.num_atoms)
 
-        # combine value and advantage stream
-        Q_dist = value + advantage - advantage.mean(dim=1, keepdim=True)
-        #Q_dist = Q_dist.squeeze()
-
-        if not dist:
-            Q = (Q_dist * z_support).sum(-1)
+            # combine value and advantage stream
+            q_dist = value + advantage - advantage.mean(dim=1, keepdim=True)
         else:
-            Q = Q_dist
+            q_dist = self.final_layers(c)
+            q_dist = q_dist.view(-1, self.action_space, self.num_atoms)
 
-        if self.use_distributional and dist:
+        if self.use_distributional:
             # apply softmax
-            return self.softmax(Q)
+            if log:
+                return F.log_softmax(q_dist, dim=-1)
+            else:
+                return F.softmax(q_dist, dim=-1)
         else:
-            return Q
+            return q_dist
 
 
 class NoisyLinear(nn.Module):

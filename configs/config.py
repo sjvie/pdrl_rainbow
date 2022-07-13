@@ -47,7 +47,7 @@ class Config:
     # paper: Prioritization importance sampling beta: 0.4 -> 1.0
     replay_buffer_beta_start = 0.4
     replay_buffer_beta_end = 1.0
-    replay_buffer_beta_annealing_steps = 2000000
+    replay_buffer_beta_annealing_steps = 10000000
 
     # the priority for the first experience in the replay buffer
     per_initial_max_priority = 1.0
@@ -74,6 +74,15 @@ class Config:
 
     # whether to use distributed rl
     use_distributional = True
+
+    # whether to use dueling dqn
+    use_dueling = True
+
+    # whether to use double dqn
+    use_double = True
+
+    # whether to use KL loss (as opposed to cross entropy loss)
+    use_kl_loss = False
 
     # if noisy is false, you must consider epsilon greedy as exploration strategy (for now)
     epsilon_start = 1
@@ -145,4 +154,4 @@ class Config:
     cpu_device_name = "cpu"
 
     # replay buffer small priority offset
-    replay_buffer_prio_offset = 1e-10
+    replay_buffer_prio_offset = 1e-6

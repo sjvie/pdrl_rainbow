@@ -1,4 +1,5 @@
 import logging
+import os
 import sys
 
 import torch
@@ -15,9 +16,12 @@ agent_load_path = "agent/30"
 log_file_name = "log_00.txt"
 config_settings = sys.argv[1]
 
-# todo: multistep configs
 if config_settings == 'duelling':
     from configs.duelling_config import Config
+elif config_settings == 'double':
+    from configs.double_config import Config
+elif config_settings == 'distributional_double':
+    from configs.distributional_double_config import Config
 elif config_settings == 'duelling_per':
     from configs.duelling_per_config import Config
 elif config_settings == 'noisy_per':
@@ -38,8 +42,14 @@ elif config_settings == 'multistep_noisy':
     from configs.multistep_noisy_config import Config
 elif config_settings == 'test':
     from configs.test_config import Config
+elif config_settings == 'rainbow2':
+    from configs.rainbow2_config import Config
+elif config_settings == 'rainbow3':
+    from configs.rainbow3_config import Config
+elif config_settings == 'rainbow4':
+    from configs.rainbow4_config import Config
 else:
-    from configs.rainbow_config import Config
+    from configs.rainbow1_config import Config
 
 
 def main():
@@ -55,16 +65,13 @@ def main():
     # CUDA uses non-deterministic methods by default
     # when toggled on in the config, CUDA is set to only use deterministic methods, reducing performance
     if Config.cuda_deterministic:
-        if torch.backends.cudnn.enabled:
-            torch.backends.cudnn.benchmark = False
-            torch.backends.cudnn.deterministic = True
+        os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
+        torch.use_deterministic_algorithms(True)
 
     if Config.env_name == "cartpole":
         env, observation_shape, action_space = cart_pole()
     else:
         env, observation_shape, action_space = atari()
-
-    # env.seed(Config.seed)
 
     logging.info("Cuda available: %s" % torch.cuda.is_available())
     logging.info("actionspace: %s" % action_space)
@@ -90,7 +97,11 @@ def cart_pole():
     # env = gym.wrappers.ResizeObservation(env, (Config.observation_width, Config.observation_height))
     # env = gym.wrappers.FrameStack(env, Config.frame_stack)
 
-    Config.obs_dtype = torch.float32
+    if Config.save_video:
+        env = gym.wrappers.RecordVideo(env, Config.save_video_folder,
+                                       episode_trigger=lambda x: x % Config.save_video_per_episodes == 0)
+
+    Config.obs_dtype = np.float32
     observation_shape = env.observation_space.shape
     action_space = env.action_space.n
     return env, observation_shape, action_space
@@ -111,13 +122,12 @@ def atari():
                                           terminal_on_life_loss=True,
                                           grayscale_obs=True
                                           )
-    #env = gym.wrappers.ResizeObservation(env, (Config.observation_width, Config.observation_height))
     env = gym.wrappers.FrameStack(env, Config.frame_stack)
     if Config.save_video:
         env = gym.wrappers.RecordVideo(env, Config.save_video_folder,
                                        episode_trigger=lambda x: x % Config.save_video_per_episodes == 0)
 
-    Config.obs_dtype = torch.uint8
+    Config.obs_dtype = np.uint8
     observation_shape = (Config.frame_stack, Config.observation_width, Config.observation_width)
     action_space = env.action_space.n
 

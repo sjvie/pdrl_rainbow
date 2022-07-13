@@ -3,25 +3,39 @@ from torch.nn import functional as F
 
 
 def get_huber_loss(agent, states, actions, rewards, n_next_states, dones):
+    batch_indices = torch.arange(agent.batch_size, device=agent.device).long()
+
     with torch.no_grad():
         # compute next Q-value using target_network
-        q_online_next = agent.target_model(n_next_states, dist=False, z_support=agent.z_support)
+        q_next_dist = agent.model(n_next_states, log=False)
+        q_next = (q_next_dist * agent.z_support).sum(dim=-1)
 
         # take action with highest q_value, _ gets the indices of the max value
-        a_star = torch.argmax(q_online_next, dim=-1)
+        a_star = torch.argmax(q_next, dim=-1)
 
-        q_target = agent.target_model(n_next_states, dist=False, z_support=agent.z_support)
-        q_target_a_star = q_target[range(agent.batch_size), a_star]
+        if agent.use_double:
+            q_target_next_dist = agent.target_model(n_next_states, log=False)
+            q_target_next = (q_target_next_dist * agent.z_support).sum(dim=-1)
 
-        target_q_values = rewards + (1 - dones) * agent.discount_factor * q_target_a_star
+            q_a_star = q_target_next[batch_indices, a_star]
+        else:
+            q_a_star = q_next[batch_indices, a_star]
 
-    q_online = agent.online_model(states, dist=False, z_support=agent.z_support)
-    current_q_values = q_online[range(agent.batch_size), actions]
+        target_q_values = rewards + (1 - dones) * agent.discount_factor * q_a_star
+
+    q_dist = agent.model(states, log=False)
+    q = (q_dist * agent.z_support).sum(dim=-1)
+    current_q_values = q[batch_indices, actions]
 
     # use Huberloss for error clipping, prevents exploding gradients
     loss = F.huber_loss(current_q_values, target_q_values, reduction="none")
 
     td_error = target_q_values - current_q_values
+
+    # TODO remove?
+    # It's what they do in the PER paper though
+    td_error = td_error.clip(-1, 1)
+
     priorities = abs(td_error).clamp(min=agent.replay_buffer_prio_offset)
 
     return loss, priorities
@@ -29,26 +43,30 @@ def get_huber_loss(agent, states, actions, rewards, n_next_states, dones):
 
 def get_distributional_loss(agent, states, actions, rewards, n_next_states, dones):
     # initialize target distribution matrix
-    m = torch.zeros(agent.batch_size, agent.num_atoms, device=agent.device)
+    m = torch.zeros((agent.batch_size, agent.num_atoms), device=agent.device)
+    batch_indices = torch.arange(agent.batch_size, device=agent.device).long()
 
     with torch.no_grad():
         # output of online model for n next states
-        q_online = agent.online_model(n_next_states, dist=False, z_support=agent.z_support)
+        q_next_dist = agent.model(n_next_states, log=False)
+        q_next = (q_next_dist * agent.z_support).sum(-1)
 
         # get best actions for next states according to online model
         # a* = argmax_a(sum_i(z_i *p_i(x_{t+1},a)))
-        a_star = torch.argmax(q_online, dim=-1)
+        a_star = torch.argmax(q_next, dim=-1)
 
-        # Double DQN part
-        # output of target model for n next states
-        q_target = agent.target_model(n_next_states, dist=True)
+        if agent.use_double:
+            # output of target model for n next states
+            q_target_next_dist = agent.target_model(n_next_states, log=False)
 
-        # get distributions for action a* selected by online model
-        next_dist = q_target[range(agent.batch_size), a_star]
+            # get distributions for action a* selected by online model
+            next_dist = q_target_next_dist[batch_indices, a_star]
+        else:
+            next_dist = q_next_dist[batch_indices, a_star]
 
         # Tz = r + gamma*(1-done)*z
-        T_z = rewards.unsqueeze(-1) + torch.outer(1 - dones,
-                                                  (agent.discount_factor ** agent.n_step_returns) * agent.z_support)
+        T_z = rewards.unsqueeze(-1) + (1 - dones).unsqueeze(-1) * (
+                agent.discount_factor ** agent.n_step_returns) * agent.z_support
 
         # eingrenzen der Werte
         T_z = T_z.clamp(min=agent.v_min, max=agent.v_max)
@@ -75,29 +93,42 @@ def get_distributional_loss(agent, states, actions, rewards, n_next_states, done
 
     # output of online model for states
     # shape (batch_size, action_space, num_atoms)
-    q_dist = agent.online_model(states, dist=True)
-    q_dist_a = q_dist[range(agent.batch_size), actions]
+    q_dist_log = agent.model(states, log=True)
+    q_dist_log_a = q_dist_log[batch_indices, actions]
 
-    # get Kullbeck-Leibler divergence of target and approximating distribution
-    # the KL divergence calculation has some issues as parts of m can be 0.
-    # this makes the log(m) = -inf and loss = nan
+    if agent.use_kl_loss:
+        # get Kullbeck-Leibler divergence of target and approximating distribution
+        # the KL divergence calculation has some issues as parts of m can be 0.
+        # this makes the log(m) = -inf and loss = nan
 
-    # KL divergence does not work when values of the distribution are 0
-    # m = m.clamp(min=1e-9)
-    # m /= m.sum(-1, keepdim=True)
+        # KL divergence does not work when values of the distribution are 0
+        # m = m.clamp(min=1e-9)
+        # m /= m.sum(-1, keepdim=True)
 
-    # loss = (m * (m / q_dist_a).log()).sum(dim=-1)  # KL divergence
+        loss = (m * m.clamp(1e-5).log() - m * q_dist_log_a).sum(dim=-1)  # KL divergence
+    else:
+        loss = -torch.sum(m * q_dist_log_a, dim=-1)  # cross entropy
 
-    # loss = torch.sum(m * torch.log(m) - m * q_dist_a, dim=-1)  # KL divergence (is it though?)
-    loss = cross_entropy(m, q_dist_a)  # cross entropy
-
-    assert not (loss < 0).any()
-    assert not torch.isnan(loss).any()
+    if torch.isnan(loss).any() or (loss < 0).any():
+        torch.set_printoptions(profile="full")
+        print("loss:", loss)
+        print("q_next_dist:", q_next_dist)
+        print("q_next:", q_next)
+        print("z_support:", agent.z_support)
+        print("a_star:", a_star)
+        print("next_dist:", next_dist)
+        print("T_z:", T_z)
+        print("bj:", bj)
+        print("l:", l)
+        print("u:", u)
+        print("l_add:", l_add)
+        print("u_add:", u_add)
+        print("same_add:", same_add)
+        print("q_dist_log:", q_dist_log)
+        print("q_dist_log_a:", q_dist_log_a)
+        torch.set_printoptions(profile="default")
+        assert False, "here you go ..."
 
     priorities = loss.clamp(min=agent.replay_buffer_prio_offset)
 
     return loss, priorities
-
-
-def cross_entropy(target_dist, pred_dist):
-    return -torch.sum(target_dist * pred_dist.log(), dim=-1)

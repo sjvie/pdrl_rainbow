@@ -13,34 +13,55 @@ class Buffer:
         self.max_size = size
 
         self.current_size = 0
+        self.n_current_size = 0
         self.idx = 0
+        self.n_idx = 0
 
-        self.memory_size = size + self.n_step_returns
+        self.memory_size = size
 
-        self.state_memory = torch.zeros((self.memory_size,) + observation_shape, dtype=conf.obs_dtype,
-                                        device=self.device)
-        self.action_memory = torch.zeros(self.memory_size, dtype=torch.uint8, device=self.device)
-        self.reward_memory = torch.zeros(self.memory_size, dtype=torch.float32, device=self.device)
-        self.done_memory = torch.zeros(self.memory_size, dtype=torch.bool, device=self.device)
+        self.state_memory = np.zeros((self.memory_size,) + observation_shape, dtype=conf.obs_dtype)
+        self.action_memory = np.zeros(self.memory_size, dtype=np.uint8)
+        self.reward_memory = np.zeros(self.memory_size, dtype=np.float32)
+        self.done_memory = np.zeros(self.memory_size, dtype=bool)
+        self.n_next_state_memory = np.zeros((self.memory_size,) + observation_shape, dtype=conf.obs_dtype)
+
+        self.n_memory_size = self.n_step_returns
+
+        self.n_state_memory = np.zeros((self.n_memory_size,) + observation_shape, dtype=conf.obs_dtype)
+        self.n_action_memory = np.zeros(self.n_memory_size, dtype=np.uint8)
+        self.n_reward_memory = np.zeros(self.n_memory_size, dtype=np.float32)
+        self.n_done_memory = np.zeros(self.n_memory_size, dtype=bool)
 
     def add(self, state, action, reward, done):
-        self.state_memory[self.idx] = state
-        self.action_memory[self.idx] = action
-        self.reward_memory[self.idx] = reward
-        self.done_memory[self.idx] = done
+        self.state_memory[self.idx] = self.n_state_memory[self.n_idx]
+        self.action_memory[self.idx] = self.n_action_memory[self.n_idx]
+        self.reward_memory[self.idx] = self.n_reward_memory[self.n_idx]
+        self.done_memory[self.idx] = self.n_done_memory[self.n_idx]
+        self.n_next_state_memory[self.idx] = state
+
+        self.n_state_memory[self.n_idx] = state
+        self.n_action_memory[self.n_idx] = action
+        self.n_reward_memory[self.n_idx] = reward
+        self.n_done_memory[self.n_idx] = done
 
         # add to the rewards of the last n experiences
         for i in range(1, self.n_step_returns):
-            r_idx = (self.idx - i) % self.memory_size
+            r_idx = (self.n_idx - i) % self.n_memory_size
 
-            self.reward_memory[r_idx] += reward * self.discount_factor ** i
+            self.n_reward_memory[r_idx] += reward * self.discount_factor ** i
 
-        # move index by one
-        self.idx = (self.idx + 1) % self.memory_size
+        # move n idx by one
+        self.n_idx = (self.n_idx + 1) % self.n_memory_size
 
         # increase size until max_size is reached
-        if self.current_size < self.max_size:
-            self.current_size += 1
+        if self.n_current_size < self.n_memory_size:
+            self.n_current_size += 1
+        else:
+            # move idx by one
+            self.idx = (self.idx + 1) % self.memory_size
+
+            if self.current_size < self.memory_size:
+                self.current_size += 1
 
     def get_batch(self, batch_size=32):
         """
@@ -49,28 +70,20 @@ class Buffer:
                                                 list of weights for training
                                                 list of indices of the experiences in the buffer
         """
+        assert self.current_size >= batch_size
 
-        indices = torch.randint(low=1, high=self.current_size + 1, size=(batch_size,), device=self.device)
-        indices = (self.idx - indices) % self.memory_size
+        indices = torch.randint(low=0, high=self.current_size, size=(batch_size,), device=self.device)
+        np_indices = indices.cpu().numpy()
 
-        states, actions, rewards, dones, n_next_states = self.get_experiences(indices)
+        # states, actions, rewards, dones, n_next_states = self.get_experiences(indices)
+        np_states, np_actions, np_rewards, np_dones, np_n_next_states = self.get_experiences(np_indices)
 
-        return (states, actions, rewards, n_next_states, dones), None, indices
+        return (np_states, np_actions, np_rewards, np_n_next_states, np_dones), None, np_indices
+
 
     def get_experiences(self, idxs):
-        # get indices of the state in n steps
-        n_next_idxs = (idxs + self.n_step_returns) % self.memory_size
-        return self.state_memory[idxs], self.action_memory[idxs], self.reward_memory[idxs], self.done_memory[idxs], \
-               self.state_memory[n_next_idxs]
-
-    def init_empty_batch(self, batch_size):
-        states = torch.empty((batch_size,) + self.observation_shape, dtype=torch.uint8, device=self.device)
-        actions = torch.empty(batch_size, dtype=torch.uint8, device=self.device)
-        rewards = torch.empty(batch_size, dtype=torch.float32, device=self.device)
-        n_next_states = torch.empty((batch_size,) + self.observation_shape, dtype=torch.uint8, device=self.device)
-        dones = torch.empty(batch_size, dtype=torch.bool, device=self.device)
-
-        return states, actions, rewards, n_next_states, dones
+        return self.state_memory[idxs], self.action_memory[idxs], self.reward_memory[idxs], \
+               self.done_memory[idxs], self.n_next_state_memory[idxs]
 
     def save(self, file_name):
         torch.save(self.state_memory, file_name + "_obs.pt")
@@ -102,25 +115,12 @@ class PrioritizedBuffer(Buffer):
         self.initial_max_priority = conf.per_initial_max_priority
 
         self.tree = SumMinMaxTree(self.memory_size)
-        self.tree_idx = 0
+        self.max_priority = self.initial_max_priority
 
     def add(self, state, action, reward, done):
-        if self.current_size >= self.n_step_returns:
-            # set the priority of the new experience
-            # take the max priority of all experiences
-            max_priority = self.tree.max()
-            if max_priority <= 0:
-                # when the buffer is empty, just use value 1.0
-                max_priority = self.initial_max_priority
-
+        if self.n_current_size >= self.n_memory_size:
             # add the nth newest experience to the tree
-            self.tree.add(self.tree_idx, max_priority)
-
-            # set the priority of the experience which is not part of the memory anymore to 0
-            self.tree.reset_priority(self.idx)
-
-            # increment tree idx
-            self.tree_idx = (self.tree_idx + 1) % self.memory_size
+            self.tree.add(self.idx, self.max_priority ** self.alpha)
 
         super().add(state, action, reward, done)
 
@@ -136,7 +136,7 @@ class PrioritizedBuffer(Buffer):
                                                 list of indices of the experiences in the buffer
         """
 
-        indices = torch.empty(batch_size, dtype=torch.long, device=self.device)
+        indices = np.empty(batch_size, dtype=np.int32)
 
         # get total sum of priorities
         treesum = self.tree.sum()
@@ -160,15 +160,13 @@ class PrioritizedBuffer(Buffer):
             # sample from the tree
             indices[i], priorities[i] = self.tree.sample(sample_priority)
 
-            assert indices[i] < self.tree_idx or indices[i] >= self.idx
+            assert 0 <= indices[i] < self.current_size, indices
 
         # get experiences from indices
         states, actions, rewards, dones, n_next_states = self.get_experiences(indices)
 
-        weights = torch.from_numpy(priorities).to(self.device)
-
         # get probabilities from priorities
-        weights /= self.tree.sum()
+        weights = priorities / self.tree.sum()
 
         # calculate weights from probabilities
         # w_j = (N* P(j))⁻beta  /max weight
@@ -177,12 +175,9 @@ class PrioritizedBuffer(Buffer):
         return (states, actions, rewards, n_next_states, dones), weights, indices
 
     def set_prio(self, idx, priority):
-        """
-        :param idx (int): index of the experience
-        :param priority (float): new priority of the experience. Alpha hyperparameter is applied in this method
-        """
         assert not math.isnan(priority)
         assert priority > 0
+        self.max_priority = max(self.max_priority, priority)
         self.tree.set_priority(idx, priority ** self.alpha)
 
     def save(self, file_name):
@@ -200,12 +195,9 @@ class SumMinMaxTree:
         self.capacity = capacity
         self.array_size = get_next_power_of_2(self.capacity)
         self.data_index_offset = self.array_size - 1
-        # todo: possible memory optimization (if needed) -> maybe float16
         self.sum_array = np.zeros(self.array_size * 2 - 1, dtype=np.float32)
         self.min_array = np.empty(self.array_size * 2 - 1, dtype=np.float32)
         self.min_array.fill(np.inf)
-        self.max_array = np.empty(self.array_size * 2 - 1, dtype=np.float32)
-        self.max_array.fill(-np.inf)
 
     def sum(self):
         return self.sum_array[0].item()
@@ -213,33 +205,31 @@ class SumMinMaxTree:
     def min(self):
         return self.min_array[0].item()
 
-    def max(self):
-        return self.max_array[0].item()
-
     def add(self, data_index, priority):
         self.set_priority(data_index, priority)
 
-    def _set_priority(self, data_index, sum_priority, min_priority, max_priority):
+    def get_priority(self, idx):
+        return self.sum_array[self.data_index_offset + idx]
+
+    def _set_priority(self, data_index, sum_priority, min_priority):
         current_index = data_index + self.data_index_offset
         self.sum_array[current_index] = sum_priority
         self.min_array[current_index] = min_priority
-        self.max_array[current_index] = max_priority
         current_index = (current_index - 1) // 2
 
         while current_index >= 0:
             child_index = current_index * 2 + 1
             self.sum_array[current_index] = self.sum_array[child_index] + self.sum_array[child_index + 1]
             self.min_array[current_index] = min(self.min_array[child_index], self.min_array[child_index + 1])
-            self.max_array[current_index] = max(self.max_array[child_index], self.max_array[child_index + 1])
 
             current_index = (current_index - 1) // 2
 
     def set_priority(self, data_index, priority):
         assert not math.isnan(priority)
-        self._set_priority(data_index, priority, priority, priority)
+        self._set_priority(data_index, priority, priority)
 
     def reset_priority(self, data_index):
-        self._set_priority(data_index, 0, np.inf, -np.inf)
+        self._set_priority(data_index, 0, np.inf)
 
     def sample(self, sample_priority):
         # add 1e-6 to account for floating point errors
@@ -255,22 +245,24 @@ class SumMinMaxTree:
                 sample_priority -= left_priority
                 current_index = left_index + 1
 
+        # clamp index
+        current_index = min(current_index, self.capacity - 1 + self.data_index_offset)
+        current_index = max(current_index, 0)
+
         data_index = current_index - self.data_index_offset
         return data_index, self.sum_array[current_index]
 
     def save(self, file_name):
         np.save(file_name + "_sum.npy", self.sum_array)
         np.save(file_name + "_min.npy", self.min_array)
-        np.save(file_name + "_max.npy", self.max_array)
 
     def load(self, file_name):
         self.sum_array = np.load(file_name + "_sum.npy")
         self.min_array = np.load(file_name + "_min.npy")
-        self.max_array = np.load(file_name + "_max.npy")
 
 
 def get_next_power_of_2(k):
-    n = 2
+    n = 1
     while n < k:
         n *= 2
     return n

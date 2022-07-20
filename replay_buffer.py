@@ -193,6 +193,7 @@ class SumMinMaxTree:
 
     def __init__(self, capacity):
         self.capacity = capacity
+        self.current_size = 0
         self.array_size = get_next_power_of_2(self.capacity)
         self.data_index_offset = self.array_size - 1
         self.sum_array = np.zeros(self.array_size * 2 - 1, dtype=np.float32)
@@ -207,6 +208,8 @@ class SumMinMaxTree:
 
     def add(self, data_index, priority):
         self.set_priority(data_index, priority)
+        if self.current_size < self.capacity:
+            self.current_size += 1
 
     def get_priority(self, idx):
         return self.sum_array[self.data_index_offset + idx]
@@ -234,6 +237,7 @@ class SumMinMaxTree:
     def sample(self, sample_priority):
         # add 1e-6 to account for floating point errors
         assert 0 <= sample_priority <= self.sum() + 1e-6
+        assert self.current_size > 0
 
         current_index = 0
         while current_index < self.data_index_offset:
@@ -246,7 +250,7 @@ class SumMinMaxTree:
                 current_index = left_index + 1
 
         # clamp index
-        current_index = min(current_index, self.capacity - 1 + self.data_index_offset)
+        current_index = min(current_index, self.current_size - 1 + self.data_index_offset)
         current_index = max(current_index, 0)
 
         data_index = current_index - self.data_index_offset

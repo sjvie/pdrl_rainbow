@@ -26,9 +26,11 @@ class Config:
     discount_factor = 0.99
 
     # paper: Noisy Nets sigma_o: 0.5
+    # they also proposed the possibility of lowering this to 0.1
     noisy_sigma_zero = 0.5
 
     # paper: Target Network Period: 32K frames
+    # possibly divided by 4 as frameskip=4
     target_model_period = 32000
 
     # paper: Adam epsilon: 1.5 x 10^-4

@@ -49,10 +49,11 @@ def train_agent(agent, env, conf):
             next_state, reward, done, _ = env.step(action)
             next_state = process_state(next_state)
 
+            episode_reward += reward
+
             if conf.clip_reward:
                 reward = np.clip(reward, -1, 1)
 
-            episode_reward += reward
             agent.step(state, action, reward, done)
 
             if total_frames > conf.start_learning_after and total_frames % conf.replay_period == 0:

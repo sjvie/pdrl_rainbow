@@ -151,7 +151,7 @@ def train_agent(agent, env, conf):
 
         action_amounts.fill(0)
         if episode % conf.save_agent_per_episodes == 0 and episode > 0:
-            agent.save(conf.agent_save_path + str(episode))
+            agent.save(conf.agent_save_path + str(episode),conf.save_buffer)
 
         episode += 1
 

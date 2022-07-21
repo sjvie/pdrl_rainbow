@@ -139,7 +139,7 @@ class Config:
     save_agent_per_episodes = 1000
     agent_save_path = "agent/"
     log_file = "220613_01.log"
-
+    save_buffer = False
     loss_avg = 200
     model_log_freq = 2000
 

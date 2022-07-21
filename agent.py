@@ -197,13 +197,14 @@ class Agent:
         else:
             return random.choice(range(0, self.action_space))
 
-    def save(self, path):
-        Path(path).mkdir(parents=True, exist_ok=True)
-        with open(path + "/replay.pickle", "wb") as f:
-            pickle.dump(self.replay_buffer, f)
-        torch.save(self.model.state_dict(), path + "/online.pt")
-        if self.use_double:
-            torch.save(self.target_model.state_dict(), path + "/target.pt")
+    def save(self, path,save_buffer=False):
+        if save_buffer:
+            Path(path).mkdir(parents=True, exist_ok=True)
+            with open(path + "/replay.pickle", "wb") as f:
+                pickle.dump(self.replay_buffer, f)
+            torch.save(self.model.state_dict(), path + "/online.pt")
+            if self.use_double:
+                torch.save(self.target_model.state_dict(), path + "/target.pt")
 
     def load(self, path):
         with open(path + "/replay.pickle", "rb") as f:

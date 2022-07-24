@@ -95,7 +95,9 @@ class Config:
     # if use_exploration is true, you will consider the softmax policy
     exp_beta_start = 0.001
     exp_beta_end = 100
-    exp_beta_annealing_steps = 4000000
+    exp_beta_mid = 1
+    exp_beta_annealing_steps = 1000000
+    exp_beta_annealing_steps2 = 3000000
 
     clip_reward = True
 

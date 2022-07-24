@@ -13,7 +13,7 @@ class Config(config.Config):
     use_exploration = True
     noisy_sigma_zero = 0.5
     target_model_period = 32000
-
+    adam_learning_rate = 0.00025
     exp_beta_start = 0.001
     exp_beta_end = 100
     exp_beta_annealing_steps = 4000000

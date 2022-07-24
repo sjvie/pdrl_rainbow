@@ -46,17 +46,17 @@ def train_agent(agent, env, conf):
             total_frames += 1
             episode_frames += 1
             if conf.use_exploration:
-                action, beta, distribution = agent.select_action(state)
+                action, beta, log_ratio = agent.select_action(state,action_prob)
             else:
-                action = agent.select_action(state)
+                action = agent.select_action(state,action_prob)
             action_amounts[action] += 1
 
             next_state, reward, done, _ = env.step(action)
             next_state = process_state(next_state)
             # we do not clip the total with this softmax exploration
             if conf.use_exploration:
-                dkl = np.log(distribution[action].numpy()/action_prob[action])
-                episode_reward += reward - (1/beta) * dkl
+
+                episode_reward += reward - (1/beta) * log_ratio
             else:
                 episode_reward += reward
                 if conf.clip_reward:

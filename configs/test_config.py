@@ -3,27 +3,22 @@ import configs.config as config
 
 class Config(config.Config):
     name = "TEST"
-
     replay_buffer_size = 100000
-    start_learning_after = 8000
+    start_learning_after = 80
 
-    # LOGGING
-    log_per_frames = 100000
-    log_episode_end = True
-    save_video = False
-    save_video_per_episodes = 10
-    save_video_folder = "vid"
-    save_agent_per_episodes = 1000
-    agent_save_path = "agent/"
-    log_file = "220613_01.log"
+    use_per = False
+    multi_step_n = 3
+    use_noisy = True
+    use_distributional = False
+    use_dueling = True
+    use_double = True
+    use_exploration = True
+    noisy_sigma_zero = 0.5
+    target_model_period = 32000
 
-    use_per = True
-    multi_step_n = 1
-    use_noisy = False
-    use_distributed = False
+    exp_beta_start = 0.9
+    exp_beta_end = 100
+    exp_beta_annealing_steps = 4000000
 
-    epsilon_start = 1
-    epsilon_end = 0.01
-    epsilon_annealing_steps = 1000000
+    env_name = "ALE/Breakout-v5"
 
-    clip_reward = True

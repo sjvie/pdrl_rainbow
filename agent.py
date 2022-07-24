@@ -43,7 +43,6 @@ class Agent:
         self.discount_factor = conf.discount_factor
 
         self.use_noisy = conf.use_noisy
-
         self.epsilon = conf.epsilon_start
         self.epsilon_end = conf.epsilon_end
         self.epsilon_annealing_steps = conf.epsilon_annealing_steps
@@ -174,8 +173,9 @@ class Agent:
 
         return loss_copy, weights
 
-    def select_action(self, np_state):
+    def select_action(self, np_state, action_prob):
         """
+        :param action_prob: tensor with probability distribution (in our case uniform distribution)
         :param np_state: (np array) numpy array with shape observation_shape
         :return (int): index of the selected action
         """
@@ -186,12 +186,13 @@ class Agent:
         self.exp_beta += self.delta_exp_beta
         if self.exp_beta > 100:
             self.exp_beta = 100
+        state = torch.from_numpy(np_state).to(self.device)
 
-        if random.random() > self.epsilon or self.use_noisy:
-            state = torch.from_numpy(np_state).to(self.device)
+        if state.dtype == torch.uint8:
+            state = state / 255.0
 
-            if state.dtype == torch.uint8:
-                state = state / 255.0
+        if not self.use_exploration and (random.random() > self.epsilon or self.use_noisy):
+
 
             with torch.no_grad():
                 q_dist = self.model(state, log=False)
@@ -202,12 +203,12 @@ class Agent:
             # return the index of the action
             return action_index.item()
         elif self.use_exploration:
-            state = torch.from_numpy(np_state).to(self.device)
             action_q_values = self.model(state, log=False).squeeze()
             # since we use the softmax for these values, we can "normalize" them by subtracting the maximum
             # from each value as it still preserves the order of magnitude
             # this also prevents possible overflows (since the softmax function uses the e-function)
-            action_probabilities = action_q_values-torch.max(action_q_values,dim=-1)
+            max_action_prob = torch.max(action_q_values).item()
+            action_probabilities = torch.add(action_q_values, -max_action_prob)
 
             # we can clip the lower bound for action values, since they (most-likely) are not considered anyway
             # also used in https://openreview.net/pdf?id=HyEtjoCqFX
@@ -217,7 +218,9 @@ class Agent:
             # pi*(a|s) = exp(exp_beta * Q(a,s)) / sum_a' exp(exp_beta*Q(a',s)
             distribution = softmax(action_probabilities, self.exp_beta)
             action = torch.multinomial(distribution, 1)
-            return action[0].item(), self.exp_beta, distribution
+            action = action[0].item()
+            log_ratio = ((distribution[action]/action_prob[action]).log()).sum().item()
+            return action, self.exp_beta, log_ratio
         else:
             return random.choice(range(0, self.action_space))
 
@@ -242,7 +245,7 @@ def softmax(action_prob, beta):
     """
         Function to calc Softmax/Boltzmann-Distribution
     """
-    exp = np.exp(beta*action_prob)
-    smax = exp/np.sum(exp)
-    assert np.sum(smax) == 1.0
+    exp = torch.exp(beta*action_prob)
+    smax = exp/torch.sum(exp)
+    #assert torch.sum(smax) == 1.0
     return smax

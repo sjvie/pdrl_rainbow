@@ -4,7 +4,7 @@ import random
 from pathlib import Path
 from torch.nn import functional as F
 import torch
-
+import numpy as np
 import loss_functions
 import wandb
 
@@ -22,7 +22,7 @@ class Agent:
 
         self.batch_size = conf.batch_size
         self.device = device
-
+        self.use_exploration = conf.use_exploration
         self.use_distributional = conf.use_distributional
         self.num_atoms = conf.distributional_atoms
         self.v_min = conf.distributional_v_min
@@ -48,6 +48,10 @@ class Agent:
         self.epsilon_end = conf.epsilon_end
         self.epsilon_annealing_steps = conf.epsilon_annealing_steps
         self.delta_eps = (self.epsilon_end - self.epsilon) / self.epsilon_annealing_steps
+        self.exp_beta = conf.exp_beta_start
+        self.exp_beta_end = conf.exp_beta_end
+        self.exp_beta_annealing_steps = conf.exp_beta_annealing_steps
+        self.delta_exp_beta = (self.exp_beta_end - self.exp_beta) / self.exp_beta_annealing_steps
 
         self.adam_learning_rate = conf.adam_learning_rate
         self.adam_e = conf.adam_e
@@ -179,6 +183,9 @@ class Agent:
         self.epsilon += self.delta_eps
         if self.epsilon < self.epsilon_end:
             self.epsilon = self.epsilon_end
+        self.exp_beta += self.delta_exp_beta
+        if self.exp_beta > 100:
+            self.exp_beta = 100
 
         if random.random() > self.epsilon or self.use_noisy:
             state = torch.from_numpy(np_state).to(self.device)
@@ -194,6 +201,23 @@ class Agent:
 
             # return the index of the action
             return action_index.item()
+        elif self.use_exploration:
+            state = torch.from_numpy(np_state).to(self.device)
+            action_q_values = self.model(state, log=False).squeeze()
+            # since we use the softmax for these values, we can "normalize" them by subtracting the maximum
+            # from each value as it still preserves the order of magnitude
+            # this also prevents possible overflows (since the softmax function uses the e-function)
+            action_probabilities = action_q_values-torch.max(action_q_values,dim=-1)
+
+            # we can clip the lower bound for action values, since they (most-likely) are not considered anyway
+            # also used in https://openreview.net/pdf?id=HyEtjoCqFX
+            action_probabilities = torch.clip(action_probabilities, min=-10, max=None)
+
+            # we sample our actions after the softmax policy :
+            # pi*(a|s) = exp(exp_beta * Q(a,s)) / sum_a' exp(exp_beta*Q(a',s)
+            distribution = softmax(action_probabilities, self.exp_beta)
+            action = torch.multinomial(distribution, 1)
+            return action[0].item(), self.exp_beta, distribution
         else:
             return random.choice(range(0, self.action_space))
 
@@ -212,3 +236,13 @@ class Agent:
         self.model.load_state_dict(torch.load(path + "/online.pt"))
         if self.use_double:
             self.target_model.load_state_dict(torch.load(path + "/target.pt"))
+
+
+def softmax(action_prob, beta):
+    """
+        Function to calc Softmax/Boltzmann-Distribution
+    """
+    exp = np.exp(beta*action_prob)
+    smax = exp/np.sum(exp)
+    assert np.sum(smax) == 1.0
+    return smax

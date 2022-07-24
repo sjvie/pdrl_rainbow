@@ -24,7 +24,10 @@ def train_agent(agent, env, conf):
 
     logging.info("Starting training")
     start_time = time.time()
-
+    # uniform action distribution
+    action_prob = np.ones(agent.action_space)*(1/agent.action_space)
+    distribution = np.empty(agent.action_space)
+    beta = 0
     while (end_episode is None or episode <= end_episode) \
             and (conf.num_frames is None or total_frames < conf.num_frames) \
             and (conf.max_time is None or time.time() < start_time + conf.max_time):
@@ -42,17 +45,22 @@ def train_agent(agent, env, conf):
                 conf.num_frames is None or total_frames < conf.num_frames):
             total_frames += 1
             episode_frames += 1
-
-            action = agent.select_action(state)
+            if conf.use_exploration:
+                action, beta, distribution = agent.select_action(state)
+            else:
+                action = agent.select_action(state)
             action_amounts[action] += 1
 
             next_state, reward, done, _ = env.step(action)
             next_state = process_state(next_state)
-
-            episode_reward += reward
-
-            if conf.clip_reward:
-                reward = np.clip(reward, -1, 1)
+            # we do not clip the total with this softmax exploration
+            if conf.use_exploration:
+                dkl = np.log(distribution[action].numpy()/action_prob[action])
+                episode_reward += reward - (1/beta) * dkl
+            else:
+                episode_reward += reward
+                if conf.clip_reward:
+                    reward = np.clip(reward, -1, 1)
 
             agent.step(state, action, reward, done)
 

@@ -48,6 +48,8 @@ elif config_settings == 'rainbow3':
     from configs.rainbow3_config import Config
 elif config_settings == 'rainbow4':
     from configs.rainbow4_config import Config
+elif config_settings == 'rainbow_expl':
+    from configs.rainbow_wo_per import Config
 else:
     from configs.rainbow1_config import Config
 

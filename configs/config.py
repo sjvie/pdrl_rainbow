@@ -86,10 +86,16 @@ class Config:
     # whether to use KL loss (as opposed to cross entropy loss)
     use_kl_loss = False
 
+    # whether to use the softmax exploration
+    use_exploration = False
     # if noisy is false, you must consider epsilon greedy as exploration strategy (for now)
     epsilon_start = 1
     epsilon_end = 0.01
     epsilon_annealing_steps = 1000000
+    # if use_exploration is true, you will consider the softmax policy
+    exp_beta_start = 0.001
+    exp_beta_end = 100
+    exp_beta_annealing_steps = 4000000
 
     clip_reward = True
 

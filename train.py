@@ -38,6 +38,7 @@ def train_agent(agent, env, conf):
         episode_over = False
         episode_frames = 0
         episode_reward = 0
+        modified_reward = 0
         episode_loss = 0
         episode_start_time = time.time()
 
@@ -55,8 +56,9 @@ def train_agent(agent, env, conf):
             next_state = process_state(next_state)
             # we do not clip the total with this softmax exploration
             if conf.use_exploration:
-
-                episode_reward += reward - (1/beta) * log_ratio
+                episode_reward += reward
+                reward += reward - (1/beta) * log_ratio
+                modified_reward += reward
             else:
                 episode_reward += reward
                 if conf.clip_reward:
@@ -81,6 +83,10 @@ def train_agent(agent, env, conf):
                                        "buffer_max_priority_with_alpha": agent.replay_buffer.max_priority ** agent.replay_buffer.alpha,
                                        "frame_weights_avg": weight_list.mean()
                                        }, step=total_frames)
+                    if conf.use_exploration:
+                        agent.run.log({"exploration_beta": agent.exp_beta,
+                                       "modified_reward": modified_reward
+                        })
 
                 # log the loss averaged over loss_avg frames
                 loss_list[train_frames % conf.loss_avg] = loss

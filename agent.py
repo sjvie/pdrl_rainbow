@@ -53,7 +53,7 @@ class Agent:
         self.exp_beta_annealing_steps = conf.exp_beta_annealing_steps
         self.exp_beta_annealing_steps2 = conf.exp_beta_annealing_steps
         self.delta_exp_beta = (self.exp_beta_mid - self.exp_beta) / self.exp_beta_annealing_steps
-        self.delta_exp_beta2 = (self.exp_beta_end - self.exp_mid) / self.exp_beta_annealing_steps
+        self.delta_exp_beta2 = (self.exp_beta_end - self.exp_beta_mid) / self.exp_beta_annealing_steps
 
         self.adam_learning_rate = conf.adam_learning_rate
         self.adam_e = conf.adam_e

@@ -50,6 +50,8 @@ elif config_settings == 'rainbow4':
     from configs.rainbow4_config import Config
 elif config_settings == 'rainbow_expl':
     from configs.rainbow_wo_per import Config
+elif config_settings == 'rainbow_expl_big_batch':
+    from configs.rainbow_expl_big_batch import Config
 else:
     from configs.rainbow1_config import Config
 

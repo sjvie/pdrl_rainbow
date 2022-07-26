@@ -7,7 +7,7 @@ from torch.nn import functional as F
 
 class Model(nn.Module):
 
-    def __init__(self, action_space, device, conf, conv_channels=None, input_features=None):
+    def __init__(self, action_space, conf, conv_channels=None, input_features=None):
         super().__init__()
 
         self.action_space = action_space
@@ -17,6 +17,8 @@ class Model(nn.Module):
         self.use_dueling = conf.use_dueling
 
         self.use_conv = conf.use_conv
+
+        device = conf.device
 
         if conf.use_conv:
             self.conv = nn.Sequential(

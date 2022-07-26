@@ -112,6 +112,7 @@ def get_distributional_loss(agent, states, actions, rewards, n_next_states, done
     if torch.isnan(loss).any() or (loss < 0).any():
         torch.set_printoptions(profile="full")
         print("loss:", loss)
+        print("m:", m)
         print("q_next_dist:", q_next_dist)
         print("q_next:", q_next)
         print("z_support:", agent.z_support)
@@ -127,7 +128,8 @@ def get_distributional_loss(agent, states, actions, rewards, n_next_states, done
         print("q_dist_log:", q_dist_log)
         print("q_dist_log_a:", q_dist_log_a)
         torch.set_printoptions(profile="default")
-        assert False, "here you go ..."
+        if torch.isnan(loss).any():
+            assert False, "here you go ..."
 
     priorities = loss.clamp(min=agent.replay_buffer_prio_offset)
 

@@ -5,10 +5,10 @@ import torch
 
 
 class Buffer:
-    def __init__(self, size, observation_shape, device, conf):
+    def __init__(self, size, observation_shape, conf):
         self.observation_shape = observation_shape
         self.n_step_returns = conf.multi_step_n
-        self.device = device
+        self.device = conf.device
         self.discount_factor = conf.discount_factor
         self.max_size = size
 
@@ -103,8 +103,8 @@ class Buffer:
 
 class PrioritizedBuffer(Buffer):
 
-    def __init__(self, size, observation_shape, device, conf):
-        super().__init__(size, observation_shape, device, conf)
+    def __init__(self, size, observation_shape, conf):
+        super().__init__(size, observation_shape, conf)
 
         self.alpha = conf.replay_buffer_alpha
         self.beta = conf.replay_buffer_beta_start

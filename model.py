@@ -130,19 +130,10 @@ class NoisyLinear(nn.Module):
         :return (Tensor): output of the layer. Tensor of dim [output_dim]
         """
 
-        # calculate the linear part of the layer using the linear weights and bias
-        lin = torch.matmul(self.lin_weights, x.transpose(0, -1)).transpose(0, -1) + self.lin_bias
-
         # get the random noise values
         e_weights, e_bias = self.get_eps_weight_bias()
 
-        # calculate the noisy part of the layer
-        noisy_bias_e = self.noisy_bias * e_bias
-        noisy_weights_e = self.noisy_weights * e_weights
-        noisy = torch.matmul(noisy_weights_e, x.transpose(0, -1)).transpose(0, -1) + noisy_bias_e
-
-        # combine linear and noisy part
-        return lin + noisy
+        return F.linear(x, self.lin_weights + self.noisy_weights * e_weights, self.lin_bias + self.noisy_bias * e_bias)
 
     # f(x) = sgn(x)* Sqrt(|x|)  from noisy net paper (page 5 under eq. 11)
     def eps_function(self, x):
@@ -157,13 +148,11 @@ class NoisyLinear(nn.Module):
         """
 
         # get first random vector and apply function
-        e_i = torch.empty(self.input_dim, device=self.device)
-        e_i.normal_()
+        e_i = torch.randn(self.input_dim, device=self.device)
         e_i = self.eps_function(e_i)
 
         # get second random vector and apply function
-        e_j = torch.empty(self.output_dim, device=self.device)
-        e_j.normal_()
+        e_j = torch.randn(self.output_dim, device=self.device)
         e_j = self.eps_function(e_j)
 
         # combine vectors to get the epsilon matrix

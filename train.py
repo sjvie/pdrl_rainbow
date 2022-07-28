@@ -13,6 +13,7 @@ def train_agent(agent, env, conf):
     assert conf.save_agent_per_frames % num_envs == 0
     assert conf.sample_repetitions % num_envs == 0 or num_envs % conf.sample_repetitions == 0
     assert conf.batch_size % num_envs == 0 or num_envs % conf.batch_size == 0
+    assert conf.batch_size % conf.sample_repetitions == 0 or conf.sample_repetitions % conf.batch_size == 0
 
     if num_envs * conf.sample_repetitions > conf.batch_size:
         train_reps = (num_envs * conf.sample_repetitions) // conf.batch_size

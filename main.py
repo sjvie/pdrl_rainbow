@@ -11,10 +11,9 @@ from agent import Agent
 import gym
 import numpy as np
 
-from env_wrappers import CartPoleImageObservationWrapper, CartPoleIntObservationWrapper, RecorderWrapper
+from env_wrappers import RecorderWrapper
 
 agent_load_path = "agent/30"
-log_file_name = "log_00.txt"
 config_settings = sys.argv[1]
 
 if config_settings == 'duelling':
@@ -73,12 +72,12 @@ def main():
     # when toggled on in the config, CUDA is set to only use deterministic methods, reducing performance
     if conf.cuda_deterministic:
         os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
-        torch.use_deterministic_algorithms(True)
+        torch.use_deterministic_algorithms(True, warn_only=True)
 
     if conf.env_name == "cartpole":
         env, observation_shape, action_space = cart_pole(conf)
     else:
-        env, observation_shape, action_space = atari(conf)
+        env, observation_shape, action_space = atari_multi(conf)
 
     # get the correct device (either CUDA or CPU)
     conf.device = torch.device(conf.gpu_device_name if torch.cuda.is_available() else conf.cpu_device_name)
@@ -97,9 +96,6 @@ def main():
 
 def cart_pole(conf):
     env = gym.make("CartPole-v1")
-    # env = CartPoleIntObservationWrapper(env)
-    # env = gym.wrappers.ResizeObservation(env, (Config.observation_width, Config.observation_height))
-    # env = gym.wrappers.FrameStack(env, Config.frame_stack)
 
     conf.tmp_vid_folder = get_tmp_vid_folder()
 
@@ -113,6 +109,30 @@ def cart_pole(conf):
 
 
 def atari(conf):
+    env = get_atari_env(conf, recorder=True)
+
+    conf.obs_dtype = np.uint8
+    observation_shape = (conf.frame_stack, conf.observation_width, conf.observation_width)
+    action_space = env.action_space.n
+
+    return env, observation_shape, action_space
+
+
+def atari_multi(conf):
+    num_envs = conf.num_envs
+    env_fns = [lambda: get_atari_env(conf, True)]
+    for _ in range(num_envs - 1):
+        env_fns.append(lambda: get_atari_env(conf, False))
+
+    env = gym.vector.AsyncVectorEnv(env_fns)
+
+    conf.obs_dtype = np.uint8
+    observation_shape = (conf.frame_stack, conf.observation_width, conf.observation_width)
+    action_space = env.action_space[0].n
+    return env, observation_shape, action_space
+
+
+def get_atari_env(conf, recorder=True):
     env = gym.make(conf.env_name,
                    obs_type="grayscale",
                    full_action_space=False,
@@ -124,21 +144,16 @@ def atari(conf):
                                           noop_max=conf.max_noops,
                                           frame_skip=conf.action_repetitions,
                                           screen_size=conf.observation_width,
-                                          terminal_on_life_loss=True,
+                                          terminal_on_life_loss=conf.terminal_on_life_loss,
                                           grayscale_obs=True
                                           )
 
     conf.tmp_vid_folder = get_tmp_vid_folder()
-    if conf.save_video_per_episodes is not None:
+    if conf.save_video_per_episodes is not None and recorder:
         env = RecorderWrapper(env, conf.tmp_vid_folder, conf.save_video_per_episodes, fps=30)
 
     env = gym.wrappers.FrameStack(env, conf.frame_stack)
-
-    conf.obs_dtype = np.uint8
-    observation_shape = (conf.frame_stack, conf.observation_width, conf.observation_width)
-    action_space = env.action_space.n
-
-    return env, observation_shape, action_space
+    return env
 
 
 def get_tmp_vid_folder():

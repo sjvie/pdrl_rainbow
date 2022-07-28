@@ -1,14 +1,17 @@
+import functools
 import math
 import pickle
 import random
 from pathlib import Path
+
+from torch import nn
 from torch.nn import functional as F
 import torch
 import numpy as np
 import loss_functions
 import wandb
 
-from model import Model
+from model import RainbowModel, NoisyLinear, RainbowNoConvModel, ImpalaModel, D2RLModel
 from replay_buffer import PrioritizedBuffer, Buffer
 import copy
 
@@ -17,7 +20,7 @@ class Agent:
 
     def __init__(self, observation_shape, action_space, conf):
         self.action_space = action_space
-        self.conv_channels = conf.frame_stack
+        self.in_channels = conf.frame_stack
         self.input_features = observation_shape[0]
 
         self.batch_size = conf.batch_size
@@ -81,12 +84,36 @@ class Agent:
 
         self.use_double = conf.use_double
 
-        self.model = Model(action_space=self.action_space, conf=conf,
-                           conv_channels=self.conv_channels, input_features=self.input_features)
+        if self.use_noisy:
+            linear_layer = functools.partial(NoisyLinear, sigma_zero=conf.noisy_sigma_zero)
+        else:
+            linear_layer = nn.Linear
+
+        if conf.model_arch == "rainbow":
+            model_cls = RainbowModel
+        elif conf.model_arch == "rainbow_no_conv":
+            model_cls = RainbowNoConvModel
+        elif conf.model_arch == "impala":
+            model_cls = ImpalaModel
+        elif conf.model_arch == "d2rl":
+            model_cls = D2RLModel
+        else:
+            raise ValueError
+
+        self.model = model_cls(conf=conf,
+                               action_space=self.action_space,
+                               linear_layer=linear_layer,
+                               in_channels=self.in_channels,
+                               in_features=self.input_features
+                               )
 
         if self.use_double:
-            self.target_model = Model(action_space=self.action_space, conf=conf,
-                                      conv_channels=self.conv_channels, input_features=self.input_features)
+            self.target_model = model_cls(conf=conf,
+                                          action_space=self.action_space,
+                                          in_channels=self.in_channels,
+                                          in_features=self.input_features,
+                                          linear_layer=linear_layer
+                                          )
             self.target_model.load_state_dict(self.model.state_dict())
 
         self.optimizer = torch.optim.Adam(self.model.parameters(),
@@ -97,8 +124,9 @@ class Agent:
         assert self.use_double
         self.target_model.load_state_dict(self.model.state_dict())
 
-    def step(self, state, action, reward, done):
-        self.replay_buffer.add(state, action, reward, done)
+    def add_transitions(self, states, actions, rewards, dones):
+        for state, action, reward, done in zip(states, actions, rewards, dones):
+            self.replay_buffer.add(state, action, reward, done)
 
     def train(self):
         batch, weights, idxs = self.replay_buffer.get_batch(batch_size=self.batch_size)
@@ -141,7 +169,7 @@ class Agent:
 
         return loss_copy, weights
 
-    def select_action(self, np_state, action_prob):
+    def select_action(self, np_states, action_prob):
         """
         :param action_prob: tensor with probability distribution (in our case uniform distribution)
         :param np_state: (np array) numpy array with shape observation_shape
@@ -157,24 +185,28 @@ class Agent:
             self.exp_beta += self.delta_exp_beta2
         if self.exp_beta > self.exp_beta_end:
             self.exp_beta = self.exp_beta_end
-        state = torch.from_numpy(np_state).to(self.device)
 
-        if state.dtype == torch.uint8:
-            state = state / 255.0
+        states = torch.from_numpy(np_states).to(self.device)
+        if states.dtype == torch.uint8:
+            states = states / 255.0
 
         if not self.use_exploration and (random.random() > self.epsilon or self.use_noisy):
 
             with torch.no_grad():
-                q_dist = self.model(state, log=False)
-                q = (q_dist * self.z_support).sum(dim=-1)
+                if self.use_distributional:
+                    q_dist = self.model(states)
+                    q = (q_dist * self.z_support).sum(dim=-1)
+                else:
+                    q = self.model(states)
 
-                action_index = torch.argmax(q, dim=-1)
+                actions = torch.argmax(q, dim=-1)
 
-            # return the index of the action
-            return action_index.item()
+            # return the indices of the actions
+            return actions
 
         elif self.use_exploration:
-            action_q_values = self.model(state, log=False).squeeze()
+            # todo: update for multiple states and actions
+            action_q_values = self.model(states, log=False).squeeze()
             # since we use the softmax for these values, we can "normalize" them by subtracting the maximum
             # from each value as it still preserves the order of magnitude
             # this also prevents possible overflows (since the softmax function uses the e-function)
@@ -190,7 +222,7 @@ class Agent:
             distribution = softmax(action_probabilities, self.exp_beta)
             action = torch.multinomial(distribution, 1)
             action = action[0].item()
-            log_ratio = ((distribution[action]/action_prob[action]).log()).sum().item()
+            log_ratio = ((distribution[action] / action_prob[action]).log()).sum().item()
             return action, self.exp_beta, log_ratio
         else:
             return random.choice(range(0, self.action_space))
@@ -206,7 +238,7 @@ def softmax(action_prob, beta):
     """
         Function to calc Softmax/Boltzmann-Distribution
     """
-    exp = torch.exp(beta*action_prob)
-    smax = exp/torch.sum(exp)
-    #assert torch.sum(smax) == 1.0
+    exp = torch.exp(beta * action_prob)
+    smax = exp / torch.sum(exp)
+    # assert torch.sum(smax) == 1.0
     return smax

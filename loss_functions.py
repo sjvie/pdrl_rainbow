@@ -7,15 +7,13 @@ def get_huber_loss(agent, states, actions, rewards, n_next_states, dones):
 
     with torch.no_grad():
         # compute next Q-value using target_network
-        q_next_dist = agent.model(n_next_states, log=False)
-        q_next = (q_next_dist * agent.z_support).sum(dim=-1)
+        q_next = agent.model(n_next_states)
 
         # take action with highest q_value, _ gets the indices of the max value
         a_star = torch.argmax(q_next, dim=-1)
 
         if agent.use_double:
-            q_target_next_dist = agent.target_model(n_next_states, log=False)
-            q_target_next = (q_target_next_dist * agent.z_support).sum(dim=-1)
+            q_target_next = agent.target_model(n_next_states)
 
             q_a_star = q_target_next[batch_indices, a_star]
         else:
@@ -23,18 +21,13 @@ def get_huber_loss(agent, states, actions, rewards, n_next_states, dones):
 
         target_q_values = rewards + (1 - dones) * agent.discount_factor * q_a_star
 
-    q_dist = agent.model(states, log=False)
-    q = (q_dist * agent.z_support).sum(dim=-1)
+    q = agent.model(states)
     current_q_values = q[batch_indices, actions]
 
     # use Huberloss for error clipping, prevents exploding gradients
     loss = F.huber_loss(current_q_values, target_q_values, reduction="none")
 
     td_error = target_q_values - current_q_values
-
-    # TODO remove?
-    # It's what they do in the PER paper though
-    td_error = td_error.clip(-1, 1)
 
     priorities = abs(td_error).clamp(min=agent.replay_buffer_prio_offset)
 
@@ -48,7 +41,7 @@ def get_distributional_loss(agent, states, actions, rewards, n_next_states, done
 
     with torch.no_grad():
         # output of online model for n next states
-        q_next_dist = agent.model(n_next_states, log=False)
+        q_next_dist = agent.model(n_next_states)
         q_next = (q_next_dist * agent.z_support).sum(-1)
 
         # get best actions for next states according to online model
@@ -57,7 +50,7 @@ def get_distributional_loss(agent, states, actions, rewards, n_next_states, done
 
         if agent.use_double:
             # output of target model for n next states
-            q_target_next_dist = agent.target_model(n_next_states, log=False)
+            q_target_next_dist = agent.target_model(n_next_states)
 
             # get distributions for action a* selected by online model
             next_dist = q_target_next_dist[batch_indices, a_star]

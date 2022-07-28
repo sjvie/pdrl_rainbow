@@ -3,6 +3,8 @@ import random
 import numpy as np
 import torch
 
+import util
+
 
 class Buffer:
     def __init__(self, size, observation_shape, conf):
@@ -79,7 +81,6 @@ class Buffer:
         np_states, np_actions, np_rewards, np_dones, np_n_next_states = self.get_experiences(np_indices)
 
         return (np_states, np_actions, np_rewards, np_n_next_states, np_dones), None, np_indices
-
 
     def get_experiences(self, idxs):
         return self.state_memory[idxs], self.action_memory[idxs], self.reward_memory[idxs], \
@@ -194,7 +195,7 @@ class SumMinMaxTree:
     def __init__(self, capacity):
         self.capacity = capacity
         self.current_size = 0
-        self.array_size = get_next_power_of_2(self.capacity)
+        self.array_size = util.get_next_power_of_2(self.capacity)
         self.data_index_offset = self.array_size - 1
         self.sum_array = np.zeros(self.array_size * 2 - 1, dtype=np.float32)
         self.min_array = np.empty(self.array_size * 2 - 1, dtype=np.float32)
@@ -263,10 +264,3 @@ class SumMinMaxTree:
     def load(self, file_name):
         self.sum_array = np.load(file_name + "_sum.npy")
         self.min_array = np.load(file_name + "_min.npy")
-
-
-def get_next_power_of_2(k):
-    n = 1
-    while n < k:
-        n *= 2
-    return n

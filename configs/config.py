@@ -25,7 +25,6 @@ class Config:
     noisy_sigma_zero = 0.5
 
     # paper: Target Network Period: 32K frames
-    # possibly divided by 4 as frameskip=4
     target_model_period = 32_000
 
     # paper: Adam epsilon: 1.5 x 10^-4
@@ -81,15 +80,20 @@ class Config:
     # whether to use double dqn
     use_double = True
 
+    # whether to end the episode and reset after a life was lost
+    terminal_on_life_loss = True
+
     # whether to use KL loss (as opposed to cross entropy loss)
     use_kl_loss = False
 
     # whether to use the softmax exploration
     use_exploration = False
+
     # if noisy is false, you must consider epsilon greedy as exploration strategy (for now)
     epsilon_start = 1
     epsilon_end = 0.01
     epsilon_annealing_steps = 1_000_000
+
     # if use_exploration is true, you will consider the softmax policy
     exp_beta_start = 0.001
     exp_beta_end = 100
@@ -98,6 +102,21 @@ class Config:
     exp_beta_annealing_steps2 = 3_000_000
 
     clip_reward = True
+
+    # the architecture of the neural network
+    # rainbow: 3 conv + 2 linear
+    # impala: impala conv + 2 linear
+    model_arch = "rainbow"
+
+    # scaling factor of feature/channel sizes of the pre / body layers of the neural network
+    model_pre_scale_factor = 1
+    model_body_scale_factor = 1
+
+    # size of the adaptive max pool layer of the impala conv
+    impala_adaptive_pool_size = 6
+
+    # number of parallel environments
+    num_envs = 64
 
     #######
     #       training config
@@ -137,11 +156,11 @@ class Config:
 
     log_wandb = True
 
-    save_video_per_episodes = 100
+    save_video_per_episodes = 300
     save_agent_per_frames = 500_000
     save_buffer = False
-    loss_avg = 200
-    model_log_freq = 2000
+    loss_avg = 500
+    model_log_freq = 5000
 
     #######
     #       miscellaneous

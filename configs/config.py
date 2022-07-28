@@ -36,6 +36,9 @@ class Config:
     # paper: Replay period: every 4 agent steps
     replay_period = 4
 
+    # average amount of times a transition is sampled
+    sample_repetitions = 8
+
     # paper: Prioritization exponent gamma: 0.5
     replay_buffer_alpha = 0.5
 

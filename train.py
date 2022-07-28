@@ -11,7 +11,15 @@ def train_agent(agent, env, conf):
     # these values need to be a multiple of the number of parallel envs to work correctly
     assert conf.target_model_period % num_envs == 0
     assert conf.save_agent_per_frames % num_envs == 0
-    assert conf.replay_period % num_envs == 0 or num_envs % conf.replay_period == 0
+    assert conf.sample_repetitions % num_envs == 0 or num_envs % conf.sample_repetitions == 0
+    assert conf.batch_size % num_envs == 0 or num_envs % conf.batch_size == 0
+
+    if num_envs * conf.sample_repetitions > conf.batch_size:
+        train_reps = (num_envs * conf.sample_repetitions) // conf.batch_size
+        train_per = 1
+    else:
+        train_reps = 1
+        train_per = (conf.batch_size // conf.sample_repetitions) // num_envs
 
     total_frames = 0
     train_frames = 0
@@ -19,7 +27,6 @@ def train_agent(agent, env, conf):
     # for logging
     loss_list = np.zeros((conf.loss_avg, conf.batch_size), dtype=np.float32)
     weight_list = np.zeros((conf.loss_avg, conf.batch_size), dtype=np.float32)
-
 
     episode = 1
     if conf.num_episodes is not None:
@@ -43,12 +50,13 @@ def train_agent(agent, env, conf):
     episode_lengths = np.zeros(num_envs)
     episode_clipped_rewards = np.zeros(num_envs)
     episode_modified_rewards = np.zeros(num_envs)
-    # todo
-    action_amounts = np.zeros((agent.action_space,), dtype=np.int32)
+    action_amounts = np.zeros((num_envs, agent.action_space,), dtype=np.int32)
     action_distribution_log_names = ["action_" + str(x) for x in range(agent.action_space)]
 
     states = env.reset(seed=conf.seed)
     states = np.array(states).squeeze()
+
+    prev_time = time.time()
     while (end_episode is None or episode <= end_episode) \
             and (conf.num_frames is None or total_frames < conf.num_frames) \
             and (conf.max_time is None or time.time() < start_time + conf.max_time):
@@ -64,38 +72,38 @@ def train_agent(agent, env, conf):
         actions = actions.cpu().numpy()
 
         # for logging
-        # todo
-        #action_amounts[action] += 1
+        action_amounts[range(num_envs), actions] += 1
 
         # step the environments async
         env.step_async(actions)
 
         # train the agent
-        if total_frames > conf.start_learning_after and total_frames % conf.replay_period == 0:
-            loss, weights = agent.train()
-            loss = loss.cpu().detach().numpy()
-            if conf.use_per:
-                weights = weights.cpu().detach().numpy()
-
-            if train_frames % conf.loss_avg == 0 and train_frames >= conf.loss_avg:
-                frame_log["frame_loss_avg"] = loss_list.mean()
-                frame_log["frame_loss_min"] = loss_list.min()
-                frame_log["frame_loss_max"] = loss_list.max()
+        if total_frames > conf.start_learning_after and total_frames % train_per == 0:
+            for _ in train_reps:
+                loss, weights = agent.train()
+                loss = loss.cpu().detach().numpy()
                 if conf.use_per:
-                    frame_log["buffer_tree_sum"] = agent.replay_buffer.tree.sum()
-                    frame_log["buffer_tree_min"] = agent.replay_buffer.tree.min()
-                    frame_log[
-                        "buffer_max_priority_with_alpha"] = agent.replay_buffer.max_priority ** agent.replay_buffer.alpha
-                    frame_log["frame_weights_avg"] = weight_list.mean()
-                if conf.use_exploration:
-                    frame_log["exploration_beta"] = agent.exp_beta
+                    weights = weights.cpu().detach().numpy()
 
-            # save for logging
-            loss_list[train_frames % conf.loss_avg] = loss
-            if conf.use_per:
-                weight_list[train_frames % conf.loss_avg] = weights
+                if train_frames % conf.loss_avg == 0 and train_frames >= conf.loss_avg:
+                    frame_log["frame_loss_avg"] = loss_list.mean()
+                    frame_log["frame_loss_min"] = loss_list.min()
+                    frame_log["frame_loss_max"] = loss_list.max()
+                    if conf.use_per:
+                        frame_log["buffer_tree_sum"] = agent.replay_buffer.tree.sum()
+                        frame_log["buffer_tree_min"] = agent.replay_buffer.tree.min()
+                        frame_log[
+                            "buffer_max_priority_with_alpha"] = agent.replay_buffer.max_priority ** agent.replay_buffer.alpha
+                        frame_log["frame_weights_avg"] = weight_list.mean()
+                    if conf.use_exploration:
+                        frame_log["exploration_beta"] = agent.exp_beta
 
-            train_frames += 1
+                # save for logging
+                loss_list[train_frames % conf.loss_avg] = loss
+                if conf.use_per:
+                    weight_list[train_frames % conf.loss_avg] = weights
+
+                train_frames += 1
 
         # update the target model
         if total_frames > conf.start_learning_after \
@@ -127,28 +135,45 @@ def train_agent(agent, env, conf):
         # add the transitions to the replay buffer
         agent.add_transitions(states, actions, rewards, dones)
 
-        if dones.any() and False:
-            # todo
-
+        if dones.any():
             if dones[0]:
                 if conf.save_video_per_episodes is not None and episode % conf.save_video_per_episodes == 0:
                     frame_log["video"] = wandb.Video(os.path.join(conf.tmp_vid_folder, str(episode) + ".mp4"))
 
-            for idx in np.nonzero(dones):
+            d_sum = dones.sum()
+            for i, idx in enumerate(np.nonzero(dones)):
                 episode += 1
-                frame_log["episode_finished"] = max(frame_log["episode_finished"], episode)
-                frame_log["episode_reward"] = max(frame_log["episode_reward"], episode_rewards[idx])
-                frame_log["episode_clipped_reward"] = max(frame_log["episode_clipped_reward"], episode_clipped_rewards[idx])
+                episode_log = {}
+                episode_log["episode_finished"] = episode
+                episode_log["episode_reward"] = episode_rewards[idx]
+                episode_log["episode_clipped_reward"] = episode_clipped_rewards[idx]
                 if conf.use_exploration:
-                    frame_log["episode_modified_reward"] = max(frame_log["episode_modified_reward"], episode_modified_rewards[idx])
-                frame_log["episode_length"] = max(frame_log["episode_length"], episode_lengths[idx])
+                    episode_log["episode_modified_reward"] = episode_modified_rewards[idx]
+                episode_log["episode_length"] = episode_lengths[idx]
+
+                action_distribution_dict = dict(
+                    zip(action_distribution_log_names, action_amounts[idx] / action_amounts[idx].sum()))
+                episode_log.update(action_distribution_dict)
+
+                if not conf.use_noisy:
+                    episode_log["episode_exploration_rate"] = agent.epsilon
+                if conf.use_per:
+                    episode_log["episode_per_beta"] = agent.replay_buffer.beta
+
+                episode_frame = total_frames - (d_sum - i) + 1
+                wandb.log(episode_log, step=episode_frame)
 
                 episode_rewards[idx] = 0
-                episode_modified_rewards[idx] = 0
                 episode_clipped_rewards[idx] = 0
+                episode_modified_rewards[idx] = 0
                 episode_lengths[idx] = 0
+                action_amounts[idx].fill(0)
 
-
+        if total_frames % (num_envs * 100) == 0:
+            t = time.time()
+            fps = episode_frames / max(t - prev_time, 0.00001)
+            frame_log["fps"] = fps
+            prev_time = t
 
         states = next_states
 
@@ -156,29 +181,6 @@ def train_agent(agent, env, conf):
             wandb.log(frame_log, step=total_frames)
         total_frames += num_envs
         episode_lengths += 1
-
-    if False:
-        episode_end_time = time.time()
-        fps = episode_frames / max(episode_end_time - episode_start_time, 0.0001)
-        episode_start_time = episode_end_time
-        print("%d fps" % fps)
-
-
-        episode_log = {}
-
-        episode_log["episode_fps"] = fps
-        action_distribution_dict = dict(zip(action_distribution_log_names, action_amounts / action_amounts.sum()))
-        episode_log.update(action_distribution_dict)
-        if not conf.use_noisy:
-            episode_log["episode_exploration_rate"] = agent.epsilon
-        if conf.use_per:
-            episode_log["episode_per_beta"] = agent.replay_buffer.beta
-
-        wandb.log(episode_log, step=total_frames)
-
-        action_amounts.fill(0)
-
-        episode += 1
 
     end_time = time.time()
     t = end_time - start_time

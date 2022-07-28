@@ -105,7 +105,7 @@ def get_distributional_loss(agent, states, actions, rewards, n_next_states, done
         m = m.clamp(min=1e-5)
         m /= m.sum(dim=-1, keepdim=True)
 
-        loss = (m * m - m * q_dist_log_a).sum(dim=-1)  # KL divergence
+        loss = (m * m.log() - m * q_dist_log_a).sum(dim=-1)  # KL divergence
     else:
         loss = -torch.sum(m * q_dist_log_a, dim=-1)  # cross entropy
 

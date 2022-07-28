@@ -80,7 +80,7 @@ def train_agent(agent, env, conf):
 
         # train the agent
         if total_frames > conf.start_learning_after and total_frames % train_per == 0:
-            for _ in train_reps:
+            for _ in range(train_reps):
                 loss, weights = agent.train()
                 loss = loss.cpu().detach().numpy()
                 if conf.use_per:
@@ -146,14 +146,14 @@ def train_agent(agent, env, conf):
                 episode += 1
                 episode_log = {}
                 episode_log["episode_finished"] = episode
-                episode_log["episode_reward"] = episode_rewards[idx]
-                episode_log["episode_clipped_reward"] = episode_clipped_rewards[idx]
+                episode_log["episode_reward"] = episode_rewards[idx].item()
+                episode_log["episode_clipped_reward"] = episode_clipped_rewards[idx].item()
                 if conf.use_exploration:
-                    episode_log["episode_modified_reward"] = episode_modified_rewards[idx]
-                episode_log["episode_length"] = episode_lengths[idx]
+                    episode_log["episode_modified_reward"] = episode_modified_rewards[idx].item()
+                episode_log["episode_length"] = episode_lengths[idx].item()
 
                 action_distribution_dict = dict(
-                    zip(action_distribution_log_names, action_amounts[idx] / action_amounts[idx].sum()))
+                    zip(action_distribution_log_names, action_amounts[idx].item() / action_amounts[idx].sum()))
                 episode_log.update(action_distribution_dict)
 
                 if not conf.use_noisy:

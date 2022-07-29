@@ -22,14 +22,18 @@ def train_agent(agent, env, conf):
         train_reps = 1
         train_per = (conf.batch_size // conf.sample_repetitions) // num_envs
 
+    conf.train_reps = train_reps
+    conf.train_per = train_per
+
     total_frames = 0
     train_frames = 0
+    episode = 1
+    video_episode = 1
 
     # for logging
     loss_list = np.zeros((conf.loss_avg, conf.batch_size), dtype=np.float32)
     weight_list = np.zeros((conf.loss_avg, conf.batch_size), dtype=np.float32)
 
-    episode = 1
     if conf.num_episodes is not None:
         end_episode = episode + conf.num_episodes
     else:
@@ -54,8 +58,11 @@ def train_agent(agent, env, conf):
     action_amounts = np.zeros((num_envs, agent.action_space,), dtype=np.int32)
     action_distribution_log_names = ["action_" + str(x) for x in range(agent.action_space)]
 
-    states = env.reset(seed=conf.seed)
+    env.reset(seed=conf.seed)
+    print("randomizing environments ...", end="")
+    states = randomize_env(env)
     states = np.array(states).squeeze()
+    print(" done")
 
     prev_time = time.time()
     while (end_episode is None or episode <= end_episode) \
@@ -138,11 +145,13 @@ def train_agent(agent, env, conf):
 
         if dones.any():
             if dones[0]:
-                if conf.save_video_per_episodes is not None and episode % conf.save_video_per_episodes == 0:
-                    frame_log["video"] = wandb.Video(os.path.join(conf.tmp_vid_folder, str(episode) + ".mp4"))
+                if conf.save_video_per_episodes is not None and video_episode % conf.save_video_per_episodes == 0:
+                    frame_log["video"] = wandb.Video(os.path.join(conf.tmp_vid_folder, str(video_episode) + ".mp4"))
+                video_episode += 1
 
             d_sum = dones.sum()
-            for i, idx in enumerate(np.nonzero(dones)):
+            frame_log["multiple_dones"] = d_sum
+            for i, idx in enumerate(np.nonzero(dones)[0]):
                 episode += 1
                 episode_log = {}
                 episode_log["episode_finished"] = episode
@@ -153,7 +162,7 @@ def train_agent(agent, env, conf):
                 episode_log["episode_length"] = episode_lengths[idx].item()
 
                 action_distribution_dict = dict(
-                    zip(action_distribution_log_names, action_amounts[idx].item() / action_amounts[idx].sum()))
+                    zip(action_distribution_log_names, action_amounts[idx] / action_amounts[idx].sum()))
                 episode_log.update(action_distribution_dict)
 
                 if not conf.use_noisy:
@@ -170,9 +179,10 @@ def train_agent(agent, env, conf):
                 episode_lengths[idx] = 0
                 action_amounts[idx].fill(0)
 
-        if total_frames % (num_envs * 100) == 0:
+        # log fps
+        if total_frames % (num_envs * 50) == 0 and total_frames > 0:
             t = time.time()
-            fps = episode_frames / max(t - prev_time, 0.00001)
+            fps = (num_envs * 50) / max(t - prev_time, 0.00001)
             frame_log["fps"] = fps
             prev_time = t
 
@@ -194,8 +204,20 @@ def train_agent(agent, env, conf):
     print("Trained for {} frames in {:02d}:{:02d}:{:02.2f}".format(total_frames, hours, minutes, seconds))
 
 
+def randomize_env(env, steps=1000):
+    assert steps > 0
+    for _ in range(steps-1):
+        actions = env.action_space.sample()
+        env.step(actions)
+    actions = env.action_space.sample()
+    return env.step(actions)[0]
+
 def init_logging(conf):
-    config = {k: v for cls in reversed(conf.mro()) for k, v in vars(cls).items() if not k.startswith("__")}
+    config = {}
+    for var_name in dir(conf):
+        if var_name.startswith("__"):
+            continue
+        config[var_name] = getattr(conf, var_name)
     wandb.init(project="pdrl", entity="pdrl", mode=("online" if conf.log_wandb else "offline"),
                config=config)
 

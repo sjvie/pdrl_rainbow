@@ -59,7 +59,7 @@ else:
 
 
 def main():
-    conf = Config
+    conf = Config()
     if conf.seed is None:
         conf.seed = random.randint(0, 1000)
 
@@ -73,6 +73,9 @@ def main():
     if conf.cuda_deterministic:
         os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
         torch.use_deterministic_algorithms(True, warn_only=True)
+
+    if conf.save_video_per_episodes is not None:
+        conf.tmp_vid_folder = get_tmp_vid_folder()
 
     if conf.env_name == "cartpole":
         env, observation_shape, action_space = cart_pole(conf)
@@ -97,8 +100,6 @@ def main():
 def cart_pole(conf):
     env = gym.make("CartPole-v1")
 
-    conf.tmp_vid_folder = get_tmp_vid_folder()
-
     if conf.save_video_per_episodes is not None:
         env = RecorderWrapper(env, conf.tmp_vid_folder, conf.save_video_per_episodes, fps=30)
 
@@ -120,9 +121,9 @@ def atari(conf):
 
 def atari_multi(conf):
     num_envs = conf.num_envs
-    env_fns = [lambda: get_atari_env(conf, True)]
+    env_fns = [lambda: get_atari_env(conf, recorder=True)]
     for _ in range(num_envs - 1):
-        env_fns.append(lambda: get_atari_env(conf, False))
+        env_fns.append(lambda: get_atari_env(conf, recorder=False))
 
     env = gym.vector.AsyncVectorEnv(env_fns)
 
@@ -148,7 +149,6 @@ def get_atari_env(conf, recorder=True):
                                           grayscale_obs=True
                                           )
 
-    conf.tmp_vid_folder = get_tmp_vid_folder()
     if conf.save_video_per_episodes is not None and recorder:
         env = RecorderWrapper(env, conf.tmp_vid_folder, conf.save_video_per_episodes, fps=30)
 

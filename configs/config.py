@@ -164,6 +164,8 @@ class Config:
     loss_avg = 500
     model_log_freq = 5000
 
+    tmp_vid_folder = None
+
     #######
     #       miscellaneous
     #######

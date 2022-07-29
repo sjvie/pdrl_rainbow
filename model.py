@@ -55,9 +55,10 @@ class ImpalaConvBlock(nn.Module):
         device = conf.device
 
         self.block = nn.Sequential(
+            # TODO figure out if the padding is correct
             nn.Conv2d(in_channels=in_channels, out_channels=hidden_channels, kernel_size=3, stride=1,
-                      padding="same", device=device),
-            # TODO figure out if the padding is correct, as torch does not have padding=same for maxpool2d
+                      padding=1, device=device),
+            # TODO figure out if the padding is correct
             nn.MaxPool2d(kernel_size=3, stride=2, padding=1),
             ImpalaConvResBlock(conf, in_channels=hidden_channels, hidden_channels=hidden_channels,
                                out_channels=hidden_channels),

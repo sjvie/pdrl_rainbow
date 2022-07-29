@@ -137,7 +137,7 @@ def get_atari_env(conf, recorder=True):
     env = gym.make(conf.env_name,
                    obs_type="grayscale",
                    full_action_space=False,
-                   repeat_action_probability=0.0,
+                   repeat_action_probability=conf.repeat_action_probability,
                    frameskip=1
                    )
 

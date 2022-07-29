@@ -112,14 +112,17 @@ class Config:
     model_arch = "rainbow"
 
     # scaling factor of feature/channel sizes of the pre / body layers of the neural network
-    model_pre_scale_factor = 1
+    model_pre_scale_factor = 2
     model_body_scale_factor = 1
 
     # size of the adaptive max pool layer of the impala conv
-    impala_adaptive_pool_size = 6
+    impala_adaptive_pool_size = 8
 
     # number of parallel environments
     num_envs = 64
+
+    # amount of random actions to perform on the environments before training
+    randomize_env_steps = 1000
 
     #######
     #       training config
@@ -139,6 +142,9 @@ class Config:
     # the maximum amount of no-ops inserted at the beginning of each episode
     # paper: up to 30
     max_noops = 30
+
+    # probability that instead of the selected action, the environment instead uses the last action
+    repeat_action_probability = 0.0
 
     # paper: Min history to start learning: 80K frames
     start_learning_after = 80_000

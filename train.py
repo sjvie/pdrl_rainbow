@@ -58,9 +58,10 @@ def train_agent(agent, env, conf):
     action_amounts = np.zeros((num_envs, agent.action_space,), dtype=np.int32)
     action_distribution_log_names = ["action_" + str(x) for x in range(agent.action_space)]
 
-    env.reset(seed=conf.seed)
-    print("randomizing environments ...", end="")
-    states = randomize_env(env)
+    states = env.reset(seed=conf.seed)
+    if conf.randomize_env_steps > 0:
+        print("randomizing environments ...", end="")
+        states = randomize_env(env, conf.randomize_env_steps)
     states = np.array(states).squeeze()
     print(" done")
 

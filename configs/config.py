@@ -161,7 +161,7 @@ class Config:
 
     log_wandb = True
 
-    save_video_per_episodes = 300
+    save_video_per_frames = 100_000
     save_agent_per_frames = 500_000
     save_buffer = False
     loss_avg = 500

@@ -10,8 +10,8 @@ from env_wrappers import RecorderWrapper
 def create_cart_pole(conf):
     env = gym.make("CartPole-v1")
 
-    if conf.save_video_per_episodes is not None:
-        env = RecorderWrapper(env, conf.tmp_vid_folder, conf.save_video_per_episodes, fps=30)
+    if conf.save_video_per_frames is not None:
+        env = RecorderWrapper(env, conf.tmp_vid_folder, conf.save_video_per_frames, fps=30)
 
     conf.obs_dtype = np.float32
     observation_shape = env.observation_space.shape
@@ -59,8 +59,8 @@ def get_atari_env(conf, recorder=True):
                                           grayscale_obs=True
                                           )
 
-    if conf.save_video_per_episodes is not None and recorder:
-        env = RecorderWrapper(env, conf.tmp_vid_folder, conf.save_video_per_episodes, fps=30)
+    if conf.save_video_per_frames is not None and recorder:
+        env = RecorderWrapper(env, conf.tmp_vid_folder, conf.save_video_per_frames, fps=30)
 
     env = gym.wrappers.FrameStack(env, conf.frame_stack)
     return env

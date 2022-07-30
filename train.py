@@ -11,7 +11,6 @@ def train_agent(agent, env, conf):
     num_envs = conf.num_envs
     # these values need to be a multiple of the number of parallel envs to work correctly
     assert conf.target_model_period % num_envs == 0
-    assert conf.save_agent_per_frames % num_envs == 0
     assert conf.sample_repetitions % num_envs == 0 or num_envs % conf.sample_repetitions == 0
     assert conf.batch_size % num_envs == 0 or num_envs % conf.batch_size == 0
     assert conf.batch_size % conf.sample_repetitions == 0 or conf.sample_repetitions % conf.batch_size == 0
@@ -31,6 +30,7 @@ def train_agent(agent, env, conf):
     steps = 0
     episode = 1
     video_episode = 1
+    next_save_agent_frame = conf.save_agent_per_frames
 
     if not conf.terminal_on_life_loss:
         lives = np.zeros(conf.num_envs, dtype=np.uint8)
@@ -129,8 +129,9 @@ def train_agent(agent, env, conf):
             agent.update_target_model()
 
         # save the agent
-        if total_frames % conf.save_agent_per_frames == 0 and total_frames > 0:
+        if total_frames >= next_save_agent_frame:
             save_agent(agent, total_frames, conf.log_wandb)
+            next_save_agent_frame += conf.save_agent_per_frames
 
         # get the next states, rewards and dones from the envs
         next_states, rewards, dones, infos = env.step_wait()
@@ -159,10 +160,8 @@ def train_agent(agent, env, conf):
         agent.add_transitions(states, actions, rewards, dones)
 
         if dones.any():
-            if dones[0]:
-                video_path = os.path.join(conf.tmp_vid_folder, str(video_episode) + ".mp4")
-                if conf.save_video_per_episodes is not None and os.path.isfile(video_path):
-                    frame_log["video"] = wandb.Video(video_path)
+            if dones[0] and "video_path" in infos[0]:
+                frame_log["video"] = wandb.Video(infos[0]["video_path"])
                 video_episode += 1
 
             d_sum = dones.sum()
@@ -227,7 +226,10 @@ def init_logging(conf):
         if var_name.startswith("__"):
             continue
         config[var_name] = getattr(conf, var_name)
-    wandb.init(project="pdrl", entity="pdrl", mode=("online" if conf.log_wandb else "offline"),
+    wandb.init(project="pdrl",
+               entity="pdrl",
+               mode=("online" if conf.log_wandb else "offline"),
+               name=conf.name,
                config=config)
 
 

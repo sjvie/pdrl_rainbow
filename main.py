@@ -73,7 +73,7 @@ def main():
         os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
         torch.use_deterministic_algorithms(True, warn_only=True)
 
-    if conf.save_video_per_episodes is not None:
+    if conf.save_video_per_frames is not None:
         conf.tmp_vid_folder = env_utils.get_tmp_vid_folder()
 
     if conf.env_name == "cartpole":

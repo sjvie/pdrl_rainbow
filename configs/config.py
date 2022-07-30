@@ -161,7 +161,10 @@ class Config:
 
     log_wandb = True
 
-    save_video_per_frames = 100_000
+    # these are the frames of a single agent
+    # the value should be set according to num_envs
+    # for num_envs = 64, a value of 1500 corresponds to approximately 100_000 frames (of all envs)
+    save_video_per_frames = 1500
     save_agent_per_frames = 500_000
     save_buffer = False
     loss_avg = 500

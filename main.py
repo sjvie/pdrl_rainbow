@@ -6,12 +6,11 @@ import time
 import torch
 
 import random
+
+import env_utils
 import train
 from agent import Agent
-import gym
 import numpy as np
-
-from env_wrappers import RecorderWrapper
 
 agent_load_path = "agent/30"
 config_settings = sys.argv[1]
@@ -75,12 +74,12 @@ def main():
         torch.use_deterministic_algorithms(True, warn_only=True)
 
     if conf.save_video_per_episodes is not None:
-        conf.tmp_vid_folder = get_tmp_vid_folder()
+        conf.tmp_vid_folder = env_utils.get_tmp_vid_folder()
 
     if conf.env_name == "cartpole":
-        env, observation_shape, action_space = cart_pole(conf)
+        env, observation_shape, action_space = env_utils.create_cart_pole(conf)
     else:
-        env, observation_shape, action_space = atari_multi(conf)
+        env, observation_shape, action_space = env_utils.create_atari_multi(conf)
 
     # get the correct device (either CUDA or CPU)
     conf.device = torch.device(conf.gpu_device_name if torch.cuda.is_available() else conf.cpu_device_name)
@@ -95,69 +94,6 @@ def main():
                   )
 
     train.train_agent(agent, env, conf=conf)
-
-
-def cart_pole(conf):
-    env = gym.make("CartPole-v1")
-
-    if conf.save_video_per_episodes is not None:
-        env = RecorderWrapper(env, conf.tmp_vid_folder, conf.save_video_per_episodes, fps=30)
-
-    conf.obs_dtype = np.float32
-    observation_shape = env.observation_space.shape
-    action_space = env.action_space.n
-    return env, observation_shape, action_space
-
-
-def atari(conf):
-    env = get_atari_env(conf, recorder=True)
-
-    conf.obs_dtype = np.uint8
-    observation_shape = (conf.frame_stack, conf.observation_width, conf.observation_width)
-    action_space = env.action_space.n
-
-    return env, observation_shape, action_space
-
-
-def atari_multi(conf):
-    num_envs = conf.num_envs
-    env_fns = [lambda: get_atari_env(conf, recorder=True)]
-    for _ in range(num_envs - 1):
-        env_fns.append(lambda: get_atari_env(conf, recorder=False))
-
-    env = gym.vector.AsyncVectorEnv(env_fns)
-
-    conf.obs_dtype = np.uint8
-    observation_shape = (conf.frame_stack, conf.observation_width, conf.observation_width)
-    action_space = env.action_space[0].n
-    return env, observation_shape, action_space
-
-
-def get_atari_env(conf, recorder=True):
-    env = gym.make(conf.env_name,
-                   obs_type="grayscale",
-                   full_action_space=False,
-                   repeat_action_probability=conf.repeat_action_probability,
-                   frameskip=1
-                   )
-
-    env = gym.wrappers.AtariPreprocessing(env,
-                                          noop_max=conf.max_noops,
-                                          frame_skip=conf.action_repetitions,
-                                          screen_size=conf.observation_width,
-                                          terminal_on_life_loss=conf.terminal_on_life_loss,
-                                          grayscale_obs=True
-                                          )
-
-    if conf.save_video_per_episodes is not None and recorder:
-        env = RecorderWrapper(env, conf.tmp_vid_folder, conf.save_video_per_episodes, fps=30)
-
-    env = gym.wrappers.FrameStack(env, conf.frame_stack)
-    return env
-
-
-def get_tmp_vid_folder():
-    return os.path.join("vid", "tmp_" + str(int(time.time())))
 
 
 if __name__ == "__main__":

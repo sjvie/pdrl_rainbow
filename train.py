@@ -1,8 +1,9 @@
 import os
 import time
 import numpy as np
-import torch
 
+import env_utils
+import util
 import wandb
 
 
@@ -16,19 +17,23 @@ def train_agent(agent, env, conf):
     assert conf.batch_size % conf.sample_repetitions == 0 or conf.sample_repetitions % conf.batch_size == 0
 
     if num_envs * conf.sample_repetitions > conf.batch_size:
-        train_reps = (num_envs * conf.sample_repetitions) // conf.batch_size
-        train_per = 1
+        train_reps_per_step = (num_envs * conf.sample_repetitions) // conf.batch_size
+        train_per_steps = 1
     else:
-        train_reps = 1
-        train_per = (conf.batch_size // conf.sample_repetitions) // num_envs
+        train_reps_per_step = 1
+        train_per_steps = (conf.batch_size // conf.sample_repetitions) // num_envs
 
-    conf.train_reps = train_reps
-    conf.train_per = train_per
+    conf.train_reps_per_step = train_reps_per_step
+    conf.train_per_steps = train_per_steps
 
     total_frames = 0
-    train_frames = 0
+    train_steps = 0
+    steps = 0
     episode = 1
     video_episode = 1
+
+    if not conf.terminal_on_life_loss:
+        lives = np.zeros(conf.num_envs, dtype=np.uint8)
 
     # for logging
     loss_list = np.zeros((conf.loss_avg, conf.batch_size), dtype=np.float32)
@@ -38,6 +43,9 @@ def train_agent(agent, env, conf):
         end_episode = episode + conf.num_episodes
     else:
         end_episode = None
+
+    get_epsilon = util.LinearValue(conf.epsilon_start, conf.epsilon_end, 0, conf.epsilon_annealing_steps)
+    get_beta = util.LinearValue(conf.replay_buffer_beta_start, conf.replay_buffer_beta_end, 0, conf.replay_buffer_beta_annealing_steps)
 
     init_logging(conf)
     wandb.watch(agent.model, log='all', log_freq=conf.model_log_freq)
@@ -49,8 +57,6 @@ def train_agent(agent, env, conf):
     distribution = np.empty(agent.action_space)
     beta = 0
 
-    episode_start_times = np.full(num_envs, time.time())
-    episode_frames = np.zeros(num_envs)
     episode_rewards = np.zeros(num_envs)
     episode_lengths = np.zeros(num_envs)
     episode_clipped_rewards = np.zeros(num_envs)
@@ -61,9 +67,9 @@ def train_agent(agent, env, conf):
     states = env.reset(seed=conf.seed)
     if conf.randomize_env_steps > 0:
         print("randomizing environments ...", end="")
-        states = randomize_env(env, conf.randomize_env_steps)
+        states = env_utils.randomize_env(env, conf.randomize_env_steps)
+        print(" done")
     states = np.array(states).squeeze()
-    print(" done")
 
     prev_time = time.time()
     while (end_episode is None or episode <= end_episode) \
@@ -72,13 +78,15 @@ def train_agent(agent, env, conf):
 
         frame_log = {}
 
-        # select actions using the agents policy on the given states
+        agent.epsilon = get_epsilon(total_frames)
+        if conf.use_per:
+            agent.replay_buffer.beta = get_beta(total_frames)
+
+        # select actions using the agent's policy on the given states
         if conf.use_exploration:
             actions, beta, log_ratio = agent.select_action(states, action_prob)
         else:
             actions = agent.select_action(states, action_prob)
-
-        actions = actions.cpu().numpy()
 
         # for logging
         action_amounts[range(num_envs), actions] += 1
@@ -87,14 +95,14 @@ def train_agent(agent, env, conf):
         env.step_async(actions)
 
         # train the agent
-        if total_frames > conf.start_learning_after and total_frames % train_per == 0:
-            for _ in range(train_reps):
+        if total_frames > conf.start_learning_after and steps % train_per_steps == 0:
+            for _ in range(train_reps_per_step):
                 loss, weights = agent.train()
                 loss = loss.cpu().detach().numpy()
                 if conf.use_per:
                     weights = weights.cpu().detach().numpy()
 
-                if train_frames % conf.loss_avg == 0 and train_frames >= conf.loss_avg:
+                if train_steps % conf.loss_avg == 0 and train_steps >= conf.loss_avg:
                     frame_log["frame_loss_avg"] = loss_list.mean()
                     frame_log["frame_loss_min"] = loss_list.min()
                     frame_log["frame_loss_max"] = loss_list.max()
@@ -108,11 +116,11 @@ def train_agent(agent, env, conf):
                         frame_log["exploration_beta"] = agent.exp_beta
 
                 # save for logging
-                loss_list[train_frames % conf.loss_avg] = loss
+                loss_list[train_steps % conf.loss_avg] = loss
                 if conf.use_per:
-                    weight_list[train_frames % conf.loss_avg] = weights
+                    weight_list[train_steps % conf.loss_avg] = weights
 
-                train_frames += 1
+                train_steps += 1
 
         # update the target model
         if total_frames > conf.start_learning_after \
@@ -125,8 +133,14 @@ def train_agent(agent, env, conf):
             save_agent(agent, total_frames, conf.log_wandb)
 
         # get the next states, rewards and dones from the envs
-        next_states, rewards, dones, _ = env.step_wait()
+        next_states, rewards, dones, infos = env.step_wait()
         next_states = np.array(next_states).squeeze()
+
+        # end episode after life loss when the env does not reset on life loss
+        if not conf.terminal_on_life_loss:
+            info_lives = np.array([i["lives"] for i in infos])
+            dones = np.logical_or(dones, np.logical_and(info_lives < lives, info_lives > 0))
+            lives = info_lives
 
         clipped_rewards = np.clip(rewards, -1, 1)
 
@@ -146,8 +160,9 @@ def train_agent(agent, env, conf):
 
         if dones.any():
             if dones[0]:
-                if conf.save_video_per_episodes is not None and video_episode % conf.save_video_per_episodes == 0:
-                    frame_log["video"] = wandb.Video(os.path.join(conf.tmp_vid_folder, str(video_episode) + ".mp4"))
+                video_path = os.path.join(conf.tmp_vid_folder, str(video_episode) + ".mp4")
+                if conf.save_video_per_episodes is not None and os.path.isfile(video_path):
+                    frame_log["video"] = wandb.Video(video_path)
                 video_episode += 1
 
             d_sum = dones.sum()
@@ -192,6 +207,7 @@ def train_agent(agent, env, conf):
         if frame_log:
             wandb.log(frame_log, step=total_frames)
         total_frames += num_envs
+        steps += 1
         episode_lengths += 1
 
     end_time = time.time()
@@ -204,14 +220,6 @@ def train_agent(agent, env, conf):
     print("Training finished")
     print("Trained for {} frames in {:02d}:{:02d}:{:02.2f}".format(total_frames, hours, minutes, seconds))
 
-
-def randomize_env(env, steps=1000):
-    assert steps > 0
-    for _ in range(steps-1):
-        actions = env.action_space.sample()
-        env.step(actions)
-    actions = env.action_space.sample()
-    return env.step(actions)[0]
 
 def init_logging(conf):
     config = {}

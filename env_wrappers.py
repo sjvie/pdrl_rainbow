@@ -7,6 +7,7 @@ import imageio
 import numpy as np
 from gym import Wrapper, spaces
 
+
 class RecorderWrapper(Wrapper):
 
     def __init__(self, env, save_dir, save_vid_per_episode, fps):
@@ -24,7 +25,8 @@ class RecorderWrapper(Wrapper):
         obs, reward, done, info = self.env.step(action)
 
         if self.episode % self.save_vid_per_episode == 0 and not self.is_recording:
-            self.writer = imageio.get_writer(os.path.join(self.save_dir, str(self.episode) + ".mp4"), fps=self.fps, macro_block_size=1)
+            self.writer = imageio.get_writer(os.path.join(self.save_dir, str(self.episode) + ".mp4"), fps=self.fps,
+                                             macro_block_size=1)
             self.is_recording = True
 
         if self.is_recording and not done:

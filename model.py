@@ -178,7 +178,8 @@ class D2RLBody(nn.Module):
         self.advantage2 = linear_layer(in_features=hidden_in_features, out_features=hidden_features, device=device)
         self.advantage3 = linear_layer(in_features=hidden_in_features, out_features=hidden_features, device=device)
         self.advantage4 = linear_layer(in_features=hidden_in_features, out_features=hidden_features, device=device)
-        self.advantage_out = linear_layer(in_features=hidden_features, out_features=self.action_space * self.num_atoms, device=device)
+        self.advantage_out = linear_layer(in_features=hidden_features, out_features=self.action_space * self.num_atoms,
+                                          device=device)
 
     def _value(self, x):
         v = self.relu(self.value1(x))
@@ -235,11 +236,17 @@ class Model(nn.Module):
         self.pre, self.body_in_features = self._create_pre(conf, action_space, linear_layer, in_channels, in_features)
         self.body = self._create_body(conf, action_space, linear_layer, self.body_in_features)
 
+        self.generate_noise()
+
     def _create_pre(self, conf, action_space, linear_layer, in_channels, input_features):
         raise NotImplementedError
 
     def _create_body(self, conf, action_space, linear_layer, body_in_features):
         raise NotImplementedError
+
+    def generate_noise(self):
+        for noisy_layer in [m for m in self.modules() if isinstance(m, NoisyLinear)]:
+            noisy_layer.generate_noise()
 
     def forward(self, x, log=False):
         c = self.pre(x)
@@ -311,6 +318,9 @@ class NoisyLinear(nn.Module):
         self.lin_bias = nn.Parameter(torch.empty(out_features, dtype=torch.float32, device=device))
         self.noisy_bias = nn.Parameter(torch.empty(out_features, dtype=torch.float32, device=device))
 
+        self.e_weights = torch.empty((out_features, in_features), dtype=torch.float32, device=device)
+        self.e_bias = torch.empty(out_features, dtype=torch.float32, device=device)
+
         # initialize the weights and bias according to section 3.2 in the noisy net paper
         # init linear weights and bias from an independent uniform distribution U[-1/sqrt(p), 1/sqrt(p)]
         lin_init_dist_bounds = math.sqrt(1 / in_features)
@@ -328,10 +338,11 @@ class NoisyLinear(nn.Module):
         :return (Tensor): output of the layer. Tensor of dim [output_dim]
         """
 
-        # get the random noise values
-        e_weights, e_bias = self.get_eps_weight_bias()
+        return F.linear(x, self.lin_weights + self.noisy_weights * self.e_weights,
+                        self.lin_bias + self.noisy_bias * self.e_bias)
 
-        return F.linear(x, self.lin_weights + self.noisy_weights * e_weights, self.lin_bias + self.noisy_bias * e_bias)
+    def generate_noise(self):
+        self.e_weights, self.e_bias = self.get_eps_weight_bias()
 
     # f(x) = sgn(x)* Sqrt(|x|)  from noisy net paper (page 5 under eq. 11)
     def eps_function(self, x):

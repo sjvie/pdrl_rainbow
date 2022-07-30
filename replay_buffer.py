@@ -14,6 +14,8 @@ class Buffer:
         self.discount_factor = conf.discount_factor
         self.max_size = size
 
+        self.num_envs = conf.num_envs
+
         self.current_size = 0
         self.n_current_size = 0
         self.idx = 0
@@ -29,41 +31,50 @@ class Buffer:
 
         self.n_memory_size = self.n_step_returns
 
-        self.n_state_memory = np.zeros((self.n_memory_size,) + observation_shape, dtype=conf.obs_dtype)
-        self.n_action_memory = np.zeros(self.n_memory_size, dtype=np.uint8)
-        self.n_reward_memory = np.zeros(self.n_memory_size, dtype=np.float32)
-        self.n_done_memory = np.zeros(self.n_memory_size, dtype=bool)
+        self.n_state_memory = np.zeros((self.n_memory_size, self.num_envs) + observation_shape, dtype=conf.obs_dtype)
+        self.n_action_memory = np.zeros((self.n_memory_size, self.num_envs), dtype=np.uint8)
+        self.n_reward_memory = np.zeros((self.n_memory_size, self.num_envs), dtype=np.float32)
+        self.n_done_memory = np.zeros((self.n_memory_size, self.num_envs), dtype=bool)
 
-    def add(self, state, action, reward, done):
-        self.state_memory[self.idx] = self.n_state_memory[self.n_idx]
-        self.action_memory[self.idx] = self.n_action_memory[self.n_idx]
-        self.reward_memory[self.idx] = self.n_reward_memory[self.n_idx]
-        self.done_memory[self.idx] = self.n_done_memory[self.n_idx]
-        self.n_next_state_memory[self.idx] = state
+    def _move_single_from_n_memory(self, n_next_state, n_memory_env_idx):
+        self.state_memory[self.idx] = self.n_state_memory[self.n_idx][n_memory_env_idx]
+        self.action_memory[self.idx] = self.n_action_memory[self.n_idx][n_memory_env_idx]
+        self.reward_memory[self.idx] = self.n_reward_memory[self.n_idx][n_memory_env_idx]
+        self.done_memory[self.idx] = self.n_done_memory[self.n_idx][n_memory_env_idx]
+        self.n_next_state_memory[self.idx] = n_next_state
 
-        self.n_state_memory[self.n_idx] = state
-        self.n_action_memory[self.n_idx] = action
-        self.n_reward_memory[self.n_idx] = reward
-        self.n_done_memory[self.n_idx] = done
+        # move idx by one
+        self.idx = (self.idx + 1) % self.memory_size
+
+        # increase size until max_size is reached
+        if self.current_size < self.memory_size:
+            self.current_size += 1
+
+    def add(self, states, actions, rewards, dones):
+        assert states.shape[0] == self.num_envs
+
+        if self.n_current_size >= self.n_memory_size:
+            for i, state in enumerate(states):
+                self._move_single_from_n_memory(state, i)
+
+        self.n_state_memory[self.n_idx] = states
+        self.n_action_memory[self.n_idx] = actions
+        self.n_reward_memory[self.n_idx] = rewards
+        self.n_done_memory[self.n_idx] = dones
 
         # add to the rewards of the last n experiences
         for i in range(1, self.n_step_returns):
             r_idx = (self.n_idx - i) % self.n_memory_size
-
-            self.n_reward_memory[r_idx] += reward * self.discount_factor ** i
+            self.n_reward_memory[r_idx] += rewards * self.discount_factor ** i
+            # set done to true if the current experience is done
+            self.n_done_memory[r_idx] = np.logical_or(self.n_done_memory[r_idx], dones)
 
         # move n idx by one
         self.n_idx = (self.n_idx + 1) % self.n_memory_size
 
-        # increase size until max_size is reached
+        # increase n_size
         if self.n_current_size < self.n_memory_size:
             self.n_current_size += 1
-        else:
-            # move idx by one
-            self.idx = (self.idx + 1) % self.memory_size
-
-            if self.current_size < self.memory_size:
-                self.current_size += 1
 
     def get_batch(self, batch_size=32):
         """
@@ -109,25 +120,20 @@ class PrioritizedBuffer(Buffer):
 
         self.alpha = conf.replay_buffer_alpha
         self.beta = conf.replay_buffer_beta_start
-        self.beta_end = conf.replay_buffer_beta_end
-        self.beta_annealing_steps = conf.replay_buffer_beta_annealing_steps
-        self.delta_beta = (self.beta_end - self.beta) / self.beta_annealing_steps
 
         self.initial_max_priority = conf.per_initial_max_priority
 
         self.tree = SumMinMaxTree(self.memory_size)
         self.max_priority = self.initial_max_priority
 
-    def add(self, state, action, reward, done):
+    def set_beta(self, beta):
+        self.beta = beta
+
+    def _move_single_from_n_memory(self, n_next_state, n_memory_env_idx):
         if self.n_current_size >= self.n_memory_size:
-            # add the nth newest experience to the tree
+            # add the experience to the tree
             self.tree.add(self.idx, self.max_priority ** self.alpha)
-
-        super().add(state, action, reward, done)
-
-        self.beta += self.delta_beta
-        if self.beta > self.beta_end:
-            self.beta = self.beta_end
+        super()._move_single_from_n_memory(n_next_state, n_memory_env_idx)
 
     def get_batch(self, batch_size=32):
         """

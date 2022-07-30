@@ -33,9 +33,6 @@ class Config:
     # paper: Memory size: 1M transitions
     replay_buffer_size = 1_000_000
 
-    # paper: Replay period: every 4 agent steps
-    replay_period = 4
-
     # average amount of times a transition is sampled
     sample_repetitions = 8
 

@@ -1,19 +1,12 @@
 import functools
-import math
-import pickle
-import random
-from pathlib import Path
 
 from torch import nn
-from torch.nn import functional as F
 import torch
 import numpy as np
 import loss_functions
-import wandb
 
 from model import RainbowModel, NoisyLinear, RainbowNoConvModel, ImpalaModel, D2RLModel
 from replay_buffer import PrioritizedBuffer, Buffer
-import copy
 
 
 class Agent:
@@ -47,9 +40,7 @@ class Agent:
 
         self.use_noisy = conf.use_noisy
         self.epsilon = conf.epsilon_start
-        self.epsilon_end = conf.epsilon_end
-        self.epsilon_annealing_steps = conf.epsilon_annealing_steps
-        self.delta_eps = (self.epsilon_end - self.epsilon) / self.epsilon_annealing_steps
+
         self.exp_beta = conf.exp_beta_start
         self.exp_beta_mid = conf.exp_beta_mid
         self.exp_beta_end = conf.exp_beta_end
@@ -125,8 +116,7 @@ class Agent:
         self.target_model.load_state_dict(self.model.state_dict())
 
     def add_transitions(self, states, actions, rewards, dones):
-        for state, action, reward, done in zip(states, actions, rewards, dones):
-            self.replay_buffer.add(state, action, reward, done)
+        self.replay_buffer.add(states, actions, rewards, dones)
 
     def train(self):
         batch, weights, idxs = self.replay_buffer.get_batch(batch_size=self.batch_size)
@@ -146,6 +136,9 @@ class Agent:
         if states.dtype == torch.uint8:
             states = states / 255.0
             n_next_states = n_next_states / 255.0
+
+        self.model.generate_noise()
+        self.target_model.generate_noise()
 
         loss, priorities = self.get_loss(self, states, actions, rewards, n_next_states, dones)
 
@@ -172,13 +165,10 @@ class Agent:
     def select_action(self, np_states, action_prob):
         """
         :param action_prob: tensor with probability distribution (in our case uniform distribution)
-        :param np_state: (np array) numpy array with shape observation_shape
+        :param np_states: (np array) numpy array with shape observation_shape
         :return (int): index of the selected action
         """
 
-        self.epsilon += self.delta_eps
-        if self.epsilon < self.epsilon_end:
-            self.epsilon = self.epsilon_end
         if self.exp_beta < self.exp_beta_mid:
             self.exp_beta += self.delta_exp_beta
         elif self.exp_beta >= self.exp_beta_mid:
@@ -190,8 +180,9 @@ class Agent:
         if states.dtype == torch.uint8:
             states = states / 255.0
 
-        if not self.use_exploration and (random.random() > self.epsilon or self.use_noisy):
+        self.model.generate_noise()
 
+        if not self.use_exploration:
             with torch.no_grad():
                 if self.use_distributional:
                     q_dist = self.model(states)
@@ -199,13 +190,20 @@ class Agent:
                 else:
                     q = self.model(states)
 
-                actions = torch.argmax(q, dim=-1)
+                actions = torch.argmax(q, dim=-1).cpu().numpy()
+
+            # epsilon greedy
+            if not self.use_noisy:
+                use_random_actions = np.random.rand(actions.shape[0]) < self.epsilon
+                random_actions = np.random.randint(0, self.action_space, actions.shape[0])
+                actions[use_random_actions] = random_actions[use_random_actions]
 
             # return the indices of the actions
             return actions
 
-        elif self.use_exploration:
+        else:
             # todo: update for multiple states and actions
+            #       and return np actions
             action_q_values = self.model(states, log=False).squeeze()
             # since we use the softmax for these values, we can "normalize" them by subtracting the maximum
             # from each value as it still preserves the order of magnitude
@@ -224,8 +222,6 @@ class Agent:
             action = action[0].item()
             log_ratio = ((distribution[action] / action_prob[action]).log()).sum().item()
             return action, self.exp_beta, log_ratio
-        else:
-            return random.choice(range(0, self.action_space))
 
     def save(self, path):
         torch.save(self.model.state_dict(), path)

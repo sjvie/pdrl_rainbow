@@ -32,22 +32,18 @@ def train_agent(agent, env, conf):
     video_episode = 1
     next_save_agent_frame = conf.save_agent_per_frames
 
-    if not conf.terminal_on_life_loss:
-        lives = np.zeros(conf.num_envs, dtype=np.uint8)
+    # if not conf.terminal_on_life_loss:
+    #    lives = np.zeros(conf.num_envs, dtype=np.uint8)
 
     # for logging
     loss_list = np.zeros((conf.loss_avg, conf.batch_size), dtype=np.float32)
     weight_list = np.zeros((conf.loss_avg, conf.batch_size), dtype=np.float32)
 
-    if conf.num_episodes is not None:
-        end_episode = episode + conf.num_episodes
-    else:
-        end_episode = None
-
     get_epsilon = util.LinearValue(conf.epsilon_start, conf.epsilon_end, 0, conf.epsilon_annealing_steps)
-    get_beta = util.LinearValue(conf.replay_buffer_beta_start, conf.replay_buffer_beta_end, 0, conf.replay_buffer_beta_annealing_steps)
+    get_beta = util.LinearValue(conf.replay_buffer_beta_start, conf.replay_buffer_beta_end, 0,
+                                conf.replay_buffer_beta_annealing_steps)
 
-    init_logging(conf)
+    util.init_logging(conf)
     wandb.watch(agent.model, log='all', log_freq=conf.model_log_freq)
 
     print("Starting training")
@@ -72,10 +68,7 @@ def train_agent(agent, env, conf):
     states = np.array(states).squeeze()
 
     prev_time = time.time()
-    while (end_episode is None or episode <= end_episode) \
-            and (conf.num_frames is None or total_frames < conf.num_frames) \
-            and (conf.max_time is None or time.time() < start_time + conf.max_time):
-
+    while conf.num_frames == -1 or total_frames < conf.num_frames:
         frame_log = {}
 
         agent.epsilon = get_epsilon(total_frames)
@@ -130,7 +123,7 @@ def train_agent(agent, env, conf):
 
         # save the agent
         if total_frames >= next_save_agent_frame:
-            save_agent(agent, total_frames, conf.log_wandb)
+            util.save_agent(agent, total_frames, conf.log_wandb)
             next_save_agent_frame += conf.save_agent_per_frames
 
         # get the next states, rewards and dones from the envs
@@ -138,10 +131,11 @@ def train_agent(agent, env, conf):
         next_states = np.array(next_states).squeeze()
 
         # end episode after life loss when the env does not reset on life loss
-        if not conf.terminal_on_life_loss:
-            info_lives = np.array([i["lives"] for i in infos])
-            dones = np.logical_or(dones, np.logical_and(info_lives < lives, info_lives > 0))
-            lives = info_lives
+        # as everyone else probably uses the score of the full game -> don't do this
+        # if not conf.terminal_on_life_loss:
+        #    info_lives = np.array([i["lives"] for i in infos])
+        #    dones = np.logical_or(dones, np.logical_and(info_lives < lives, info_lives > 0))
+        #    lives = info_lives
 
         clipped_rewards = np.clip(rewards, -1, 1)
 
@@ -218,28 +212,3 @@ def train_agent(agent, env, conf):
     seconds = t
     print("Training finished")
     print("Trained for {} frames in {:02d}:{:02d}:{:02.2f}".format(total_frames, hours, minutes, seconds))
-
-
-def init_logging(conf):
-    config = {}
-    for var_name in dir(conf):
-        if var_name.startswith("__"):
-            continue
-        config[var_name] = getattr(conf, var_name)
-    wandb.init(project="pdrl",
-               entity="pdrl",
-               mode=("online" if conf.log_wandb else "offline"),
-               name=conf.name,
-               config=config)
-
-
-def save_agent(agent, total_frames, save_to_wandb):
-    path = get_agent_save_path(total_frames)
-    agent.save(path)
-    if save_to_wandb:
-        wandb.save(path)
-
-
-def get_agent_save_path(episode):
-    filename = "model_" + str(episode) + ".pt"
-    return os.path.join(wandb.run.dir, filename)

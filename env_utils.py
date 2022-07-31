@@ -7,18 +7,6 @@ import numpy as np
 from env_wrappers import RecorderWrapper
 
 
-def create_cart_pole(conf):
-    env = gym.make("CartPole-v1")
-
-    if conf.save_video_per_frames is not None:
-        env = RecorderWrapper(env, conf.tmp_vid_folder, conf.save_video_per_frames, fps=30)
-
-    conf.obs_dtype = np.float32
-    observation_shape = env.observation_space.shape
-    action_space = env.action_space.n
-    return env, observation_shape, action_space
-
-
 def create_atari(conf):
     env = get_atari_env(conf, recorder=True)
 

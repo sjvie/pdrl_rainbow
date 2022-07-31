@@ -5,7 +5,7 @@ import torch
 import numpy as np
 import loss_functions
 
-from model import RainbowModel, NoisyLinear, RainbowNoConvModel, ImpalaModel, D2RLModel
+from model import RainbowModel, NoisyLinear, ImpalaModel, D2RLModel
 from replay_buffer import PrioritizedBuffer, Buffer
 
 
@@ -14,7 +14,6 @@ class Agent:
     def __init__(self, observation_shape, action_space, conf):
         self.action_space = action_space
         self.in_channels = conf.frame_stack
-        self.input_features = observation_shape[0]
 
         self.batch_size = conf.batch_size
         self.device = conf.device
@@ -59,7 +58,6 @@ class Agent:
         self.replay_buffer_prio_offset = conf.replay_buffer_prio_offset
 
         self.use_kl_loss = conf.use_kl_loss
-
         self.grad_clip = conf.grad_clip
 
         if self.use_per:
@@ -82,8 +80,6 @@ class Agent:
 
         if conf.model_arch == "rainbow":
             model_cls = RainbowModel
-        elif conf.model_arch == "rainbow_no_conv":
-            model_cls = RainbowNoConvModel
         elif conf.model_arch == "impala":
             model_cls = ImpalaModel
         elif conf.model_arch == "d2rl":
@@ -94,16 +90,14 @@ class Agent:
         self.model = model_cls(conf=conf,
                                action_space=self.action_space,
                                linear_layer=linear_layer,
-                               in_channels=self.in_channels,
-                               in_features=self.input_features
+                               in_channels=self.in_channels
                                )
 
         if self.use_double:
             self.target_model = model_cls(conf=conf,
                                           action_space=self.action_space,
-                                          in_channels=self.in_channels,
-                                          in_features=self.input_features,
-                                          linear_layer=linear_layer
+                                          linear_layer=linear_layer,
+                                          in_channels=self.in_channels
                                           )
             self.target_model.load_state_dict(self.model.state_dict())
 

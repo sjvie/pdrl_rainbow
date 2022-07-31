@@ -1,10 +1,7 @@
 import os
-import time
 from pathlib import Path
 
-import cv2
 import imageio
-import numpy as np
 from gym import Wrapper
 
 

@@ -102,6 +102,7 @@ def get_distributional_loss(agent, states, actions, rewards, n_next_states, done
     else:
         loss = -torch.sum(m * q_dist_log_a, dim=-1)  # cross entropy
 
+    # todo: remove
     if torch.isnan(loss).any() or (loss < 0).any():
         torch.set_printoptions(profile="full")
         print("loss:", loss)

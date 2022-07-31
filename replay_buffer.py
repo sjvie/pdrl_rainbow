@@ -152,9 +152,6 @@ class PrioritizedBuffer(Buffer):
         batch_range = treesum / batch_size
 
         # get the max weight using the minimum priority
-        # todo: some other implementations just use the max weight of the batch
-        #       what does this change?
-
         min_probability = self.tree.min() / self.tree.sum()
         max_weight = (self.current_size * min_probability) ** (-self.beta)
 

@@ -1,4 +1,3 @@
-import functools
 import math
 import torch.nn as nn
 import torch
@@ -229,16 +228,15 @@ class D2RLBody(nn.Module):
 
 
 class Model(nn.Module):
-    def __init__(self, conf, action_space, linear_layer, in_channels=None, in_features=None):
+    def __init__(self, conf, action_space, linear_layer, in_channels):
         super().__init__()
-        assert in_channels is not None or in_features is not None
 
-        self.pre, self.body_in_features = self._create_pre(conf, action_space, linear_layer, in_channels, in_features)
+        self.pre, self.body_in_features = self._create_pre(conf, action_space, linear_layer, in_channels)
         self.body = self._create_body(conf, action_space, linear_layer, self.body_in_features)
 
         self.generate_noise()
 
-    def _create_pre(self, conf, action_space, linear_layer, in_channels, input_features):
+    def _create_pre(self, conf, action_space, linear_layer, in_channels):
         raise NotImplementedError
 
     def _create_body(self, conf, action_space, linear_layer, body_in_features):
@@ -255,7 +253,7 @@ class Model(nn.Module):
 
 
 class RainbowModel(Model):
-    def _create_pre(self, conf, action_space, linear_layer, in_channels, input_features):
+    def _create_pre(self, conf, action_space, linear_layer, in_channels):
         conv = RainbowConv(conf, in_channels)
         # the size of the output of the convolutional layer (given frame_width = frame_height = 84)
         # 64 * 7 * 7
@@ -266,18 +264,8 @@ class RainbowModel(Model):
         return RainbowBody(conf, action_space, body_in_features, linear_layer)
 
 
-class RainbowNoConvModel(Model):
-    def _create_pre(self, conf, action_space, linear_layer, in_channels, input_features):
-        hidden_features = 128
-        pre = linear_layer(in_features=input_features, out_features=hidden_features, device=conf.device)
-        return pre, hidden_features
-
-    def _create_body(self, conf, action_space, linear_layer, body_in_features):
-        return RainbowBody(conf, action_space, body_in_features, linear_layer)
-
-
 class D2RLModel(Model):
-    def _create_pre(self, conf, action_space, linear_layer, in_channels, input_features):
+    def _create_pre(self, conf, action_space, linear_layer, in_channels):
         conv = RainbowConv(conf, in_channels)
         # the size of the output of the convolutional layer (given frame_width = frame_height = 84)
         # 64 * 7 * 7
@@ -289,7 +277,7 @@ class D2RLModel(Model):
 
 
 class ImpalaModel(Model):
-    def _create_pre(self, conf, action_space, linear_layer, in_channels, input_features):
+    def _create_pre(self, conf, action_space, linear_layer, in_channels):
         scale_factor = conf.model_pre_scale_factor
         adaptive_pool_size = conf.impala_adaptive_pool_size
         conv = nn.Sequential(

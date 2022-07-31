@@ -2,14 +2,14 @@ import configs.config as config
 
 
 class Config(config.Config):
-    name = "DUELLING_NOISY"
+    name = "MULTISTEP_NOISY"
 
     # paper: Adam learning rate: 0.0000625
     adam_learning_rate = 0.00025 #0.0000625
 
     use_per = False
-    multi_step_n = 1
+    multi_step_n = 3
     use_noisy = True
     use_distributional = False
 
-    clip_reward = False
+    clip_reward = True

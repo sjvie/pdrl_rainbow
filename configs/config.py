@@ -12,6 +12,7 @@ class Config:
     frame_stack = 4
 
     # paper: Action repetitions: 4
+    # aka frameskip
     action_repetitions = 4
 
     # paper: Minibatch size: 32
@@ -127,14 +128,8 @@ class Config:
 
     env_name = "ALE/Breakout-v5"
 
-    # maximum amount of episodes to train for (inf if None)
-    num_episodes = None
-
-    # maximum amount of frames to train for (inf if None)
-    num_frames = None
-
-    # maximum time to train (seconds) (inf if None)
-    max_time = None
+    # maximum amount of frames to train for (inf if -1)
+    num_frames = -1
 
     # the maximum amount of no-ops inserted at the beginning of each episode
     # paper: up to 30
@@ -152,8 +147,8 @@ class Config:
     # whether to force cuda to act deterministic
     cuda_deterministic = False
 
-    # The seed for pseudo-random number generation, if None, a random seed will be selected
-    seed = None
+    # The seed for pseudo-random number generation, if -1, a random seed will be selected
+    seed = -1
 
     #######
     #       logging config
@@ -170,7 +165,7 @@ class Config:
     loss_avg = 500
     model_log_freq = 5000
 
-    tmp_vid_folder = None
+    tmp_vid_folder = ""
 
     #######
     #       miscellaneous

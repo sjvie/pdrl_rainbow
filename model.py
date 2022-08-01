@@ -276,6 +276,22 @@ class D2RLModel(Model):
         return D2RLBody(conf, action_space, body_in_features, linear_layer)
 
 
+class D2RLImpalaModel(Model):
+    def _create_pre(self, conf, action_space, linear_layer, in_channels):
+        scale_factor = conf.model_pre_scale_factor
+        adaptive_pool_size = conf.impala_adaptive_pool_size
+        conv = nn.Sequential(
+            ImpalaConv(conf, in_channels, scale_factor),
+            nn.AdaptiveMaxPool2d((adaptive_pool_size, adaptive_pool_size))
+        )
+        # the size of the output of the convolutional layer (independent of frame size because of adaptive max pooling)
+        conv_out_features = 32 * adaptive_pool_size * adaptive_pool_size * scale_factor
+        return conv, conv_out_features
+
+    def _create_body(self, conf, action_space, linear_layer, body_in_features):
+        return D2RLBody(conf, action_space, body_in_features, linear_layer)
+
+
 class ImpalaModel(Model):
     def _create_pre(self, conf, action_space, linear_layer, in_channels):
         scale_factor = conf.model_pre_scale_factor

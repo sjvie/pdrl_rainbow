@@ -91,7 +91,7 @@ def get_conf(args_raw):
         parser_name = "--" + var_name
         parser.add_argument(parser_name, type=ast.literal_eval)
 
-    args, unknown_args = parser.parse_known_args(args_raw)
+    args = parser.parse_args(args_raw)
 
     args = vars(args)
     if args["config"] is not None:

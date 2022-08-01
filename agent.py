@@ -5,7 +5,7 @@ import torch
 import numpy as np
 import loss_functions
 
-from model import RainbowModel, NoisyLinear, ImpalaModel, D2RLModel
+from model import RainbowModel, NoisyLinear, ImpalaModel, D2RLModel, D2RLImpalaModel
 from replay_buffer import PrioritizedBuffer, Buffer
 
 
@@ -84,6 +84,8 @@ class Agent:
             model_cls = ImpalaModel
         elif conf.model_arch == "d2rl":
             model_cls = D2RLModel
+        elif conf.model_arch == "d2rl_impala":
+            model_cls = D2RLImpalaModel
         else:
             raise ValueError
 

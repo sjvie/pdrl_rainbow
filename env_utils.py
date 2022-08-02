@@ -3,6 +3,7 @@ import time
 
 import gym
 import numpy as np
+from gym.wrappers import TimeLimit
 
 from env_wrappers import RecorderWrapper
 
@@ -38,6 +39,10 @@ def get_atari_env(conf, recorder=True):
                    repeat_action_probability=conf.repeat_action_probability,
                    frameskip=1
                    )
+
+    if isinstance(env, TimeLimit):
+        env._max_episode_steps = conf.max_frames_per_episode
+        env.spec.max_episode_steps = conf.max_frames_per_episode
 
     env = gym.wrappers.AtariPreprocessing(env,
                                           noop_max=conf.max_noops,

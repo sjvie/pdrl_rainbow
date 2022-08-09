@@ -77,7 +77,7 @@ def train_agent(agent, env, conf):
 
         # select actions using the agent's policy on the given states
         if conf.use_exploration:
-            actions, beta, log_ratio = agent.select_action(states, action_prob)
+            actions, log_ratio = agent.select_action(states, action_prob)
         else:
             actions = agent.select_action(states, action_prob)
 
@@ -141,10 +141,11 @@ def train_agent(agent, env, conf):
 
         episode_rewards += rewards
         episode_clipped_rewards += clipped_rewards
-
         # we do not clip the total with this softmax exploration
         if conf.use_exploration:
-            rewards += rewards - (1 / beta) * log_ratio
+            # R' = R - ((1/beta) * log(pi(a'|s')/p(a'))
+            # note we put the 1/beta in the method change_and_get_beta()
+            rewards = rewards - agent.change_and_get_beta() * log_ratio
             episode_modified_rewards += rewards
         else:
             if conf.clip_reward:

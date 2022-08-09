@@ -56,7 +56,8 @@ class Agent:
         self.replay_buffer_alpha = conf.replay_buffer_alpha
         self.replay_buffer_size = conf.replay_buffer_size
         self.replay_buffer_prio_offset = conf.replay_buffer_prio_offset
-
+        self.num_envs = conf.num_envs
+        self.num_envs_indexes = [i for i in range(self.num_envs)]
         self.use_kl_loss = conf.use_kl_loss
         self.grad_clip = conf.grad_clip
 
@@ -165,12 +166,7 @@ class Agent:
         :return (int): index of the selected action
         """
 
-        if self.exp_beta < self.exp_beta_mid:
-            self.exp_beta += self.delta_exp_beta
-        elif self.exp_beta >= self.exp_beta_mid:
-            self.exp_beta += self.delta_exp_beta2
-        if self.exp_beta > self.exp_beta_end:
-            self.exp_beta = self.exp_beta_end
+
 
         states = torch.from_numpy(np_states).to(self.device)
         if states.dtype == torch.uint8:
@@ -193,19 +189,22 @@ class Agent:
                 use_random_actions = np.random.rand(actions.shape[0]) < self.epsilon
                 random_actions = np.random.randint(0, self.action_space, actions.shape[0])
                 actions[use_random_actions] = random_actions[use_random_actions]
-
             # return the indices of the actions
             return actions
 
         else:
             # todo: update for multiple states and actions
             #       and return np actions
-            action_q_values = self.model(states, log=False).squeeze()
+            #action_prob = action_prob.expand(-1,self.num_envs)
+            action_q_values = self.model(states, log=False)
             # since we use the softmax for these values, we can "normalize" them by subtracting the maximum
             # from each value as it still preserves the order of magnitude
             # this also prevents possible overflows (since the softmax function uses the e-function)
-            max_action_prob = torch.max(action_q_values).item()
-            action_probabilities = torch.add(action_q_values, -max_action_prob)
+            max_action_prob = torch.max(action_q_values,dim=-1)
+            max_action_prob = max_action_prob[0]
+            max_action_prob = max_action_prob[:,None]
+            max_action_prob = max_action_prob.expand(-1,self.action_space)
+            action_probabilities = torch.add(-1 * max_action_prob,action_q_values)
 
             # we can clip the lower bound for action values, since they (most-likely) are not considered anyway
             # also used in https://openreview.net/pdf?id=HyEtjoCqFX
@@ -214,10 +213,23 @@ class Agent:
             # we sample our actions after the softmax policy :
             # pi*(a|s) = exp(exp_beta * Q(a,s)) / sum_a' exp(exp_beta*Q(a',s)
             distribution = softmax(action_probabilities, self.exp_beta)
-            action = torch.multinomial(distribution, 1)
-            action = action[0].item()
-            log_ratio = ((distribution[action] / action_prob[action]).log()).sum().item()
-            return action, self.exp_beta, log_ratio
+            #torch.multinomial input with num_envs rows, output (num_envs X num_samples) , where num_samples =1
+            # we get back a Matrix with size (num_envs x 1)
+            actions = torch.multinomial(distribution, 1)
+
+            distribution = distribution.cpu().detach().numpy()
+
+            #transform action matrix to vector
+            actions = actions.squeeze().cpu().detach().numpy()
+            # TODO: maybe rewrite to tensor if performance drops
+            # calculating the log_ratio from pi(a|s)/p(a)
+            # -> log(pi(a|s)/p(a))
+            # Since distribution, action_prob and actions have #num_envs entries
+            # we need a small workaround to return the log ratio also as vector with len(num_envs)
+            log_ratio = distribution / action_prob
+            log_ratio2 = [log_ratio[i][actions[i]] for i in range(self.num_envs)]
+            log_ratio2 = np.log(log_ratio2)
+            return actions, log_ratio2
 
     def save(self, path):
         torch.save(self.model.state_dict(), path)
@@ -225,6 +237,18 @@ class Agent:
     def load(self, path):
         self.model.load_state_dict(torch.load(path))
 
+    def change_and_get_beta(self):
+        beta = []
+        for i in range(self.num_envs):
+            if self.exp_beta < self.exp_beta_mid:
+                self.exp_beta += self.delta_exp_beta
+            elif self.exp_beta >= self.exp_beta_mid:
+                self.exp_beta += self.delta_exp_beta2
+            elif self.exp_beta > self.exp_beta_end:
+                self.exp_beta = self.exp_beta_end
+            beta.append(1/self.exp_beta)
+
+        return beta
 
 def softmax(action_prob, beta):
     """

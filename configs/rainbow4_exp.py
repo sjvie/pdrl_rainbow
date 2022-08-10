@@ -2,7 +2,7 @@ import configs.config as config
 
 
 class Config(config.Config):
-    name = "Seaquest Impala dist new_env 10M"
+    name = "Seaquest Impala no dist new_env exp 10M"
 
     use_per = True
     multi_step_n = 3

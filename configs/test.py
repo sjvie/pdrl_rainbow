@@ -13,11 +13,11 @@ class Config(config.Config):
 
     num_frames = 100_000
 
-    env_name = "ALE/Asterix-v5"
+    env_name = "ALE/Breakout-v5"
 
-    model_arch = "impala"
+    #model_arch = "impala"
     #model_arch = "d2rl"
-    #model_arch = "rainbow"
+    model_arch = "rainbow"
 
     model_pre_scale_factor = 2
     model_body_scale_factor = 1
@@ -29,7 +29,7 @@ class Config(config.Config):
     terminal_on_life_loss = False
 
     batch_size = 32
-    num_envs = 2
+    num_envs = 3
     sample_repetitions = 8
 
     save_video_per_frames = 2500
@@ -56,7 +56,7 @@ class Config(config.Config):
     use_dueling = True
     use_double = True
     use_kl_loss = True
-
+    use_exploration = True
     replay_buffer_alpha = 0.2
 
     replay_buffer_beta_start = 0.4

@@ -2,11 +2,11 @@ import configs.config as config
 
 
 class Config(config.Config):
-    name = "SpaceInvaders Impala dist new_env 10M"
+    name = "SpaceInvaders Impala no dist new_env exp 10M"
 
     use_per = True
     multi_step_n = 3
-    use_noisy = True
+    use_noisy = False
     use_distributional = False
     use_dueling = True
     use_double = True

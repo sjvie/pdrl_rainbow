@@ -83,6 +83,27 @@ class ImpalaConv(nn.Module):
     def forward(self, x):
         return self.conv(x)
 
+class RewardBody(nn.Module):
+    def __init__(self, conf, action_space, in_features, linear_layer, no_grad=False):
+        super().__init__()
+        self.action_space = action_space
+        self.num_atoms = 1
+        self.no_grad = no_grad
+        device = conf.device
+        self.final_layers = nn.Sequential(
+                linear_layer(in_features=in_features, out_features=512, device=device),
+                nn.ReLU(),
+                linear_layer(in_features=512, out_features=self.action_space * self.num_atoms, device=device)
+            )
+    def forward(self,x):
+        if self.no_grad:
+            with torch.no_grad:
+                q_dist = self.final_layers(x)
+                q_dist = q_dist.view(-1, self.action_space, self.num_atoms)
+        else:
+            q_dist = self.final_layers(x)
+            q_dist = q_dist.view(-1, self.action_space, self.num_atoms)
+        return q_dist.squeeze()
 
 class RainbowBody(nn.Module):
     def __init__(self, conf, action_space, in_features, linear_layer):
@@ -228,9 +249,9 @@ class D2RLBody(nn.Module):
 
 
 class Model(nn.Module):
-    def __init__(self, conf, action_space, linear_layer, in_channels):
+    def __init__(self, conf, action_space, linear_layer, in_channels, no_grad=False):
         super().__init__()
-
+        self.no_grad = no_grad
         self.pre, self.body_in_features = self._create_pre(conf, action_space, linear_layer, in_channels)
         self.body = self._create_body(conf, action_space, linear_layer, self.body_in_features)
 
@@ -247,9 +268,25 @@ class Model(nn.Module):
             noisy_layer.generate_noise()
 
     def forward(self, x, log=False):
-        c = self.pre(x)
-        c = c.view(-1, self.body_in_features)
+        if(self.no_grad):
+            with torch.no_grad():
+                c = self.pre(x)
+                c = c.view(-1, self.body_in_features)
+        else:
+            c = self.pre(x)
+            c = c.view(-1, self.body_in_features)
         return self.body(c, log)
+
+
+# for RND
+class RewardModel(Model):
+    def _create_pre(self, conf, action_space, linear_layer, in_channels):
+        conv = RainbowConv(conf, in_channels)
+        conv_out_features = 3136
+        return conv, conv_out_features
+
+    def _create_body(self, conf, action_space, linear_layer, body_in_features):
+        return RewardBody(conf,action_space,body_in_features,linear_layer, self.no_grad)
 
 
 class RainbowModel(Model):

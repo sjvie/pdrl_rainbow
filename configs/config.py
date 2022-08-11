@@ -89,7 +89,7 @@ class Config:
 
     # whether to use the softmax exploration
     use_exploration = False
-
+    use_rnd = False
     # if noisy is false, you must consider epsilon greedy as exploration strategy (for now)
     epsilon_start = 1
     epsilon_end = 0.01

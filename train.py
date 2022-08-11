@@ -147,6 +147,11 @@ def train_agent(agent, env, conf):
             # note we put the 1/beta in the method change_and_get_beta()
             rewards = rewards - agent.change_and_get_beta() * log_ratio
             episode_modified_rewards += rewards
+        elif conf.use_rnd:
+            int_rewards = agent.rnd.calc_int(next_states)
+            episode_modified_rewards += int_rewards
+            rewards = clipped_rewards
+            rewards += int_rewards
         else:
             if conf.clip_reward:
                 rewards = clipped_rewards

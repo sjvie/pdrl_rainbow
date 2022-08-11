@@ -4,6 +4,7 @@ from torch import nn
 import torch
 import numpy as np
 import loss_functions
+from reward_model import RND
 
 from model import RainbowModel, NoisyLinear, ImpalaModel, D2RLModel, D2RLImpalaModel
 from replay_buffer import PrioritizedBuffer, Buffer
@@ -36,7 +37,7 @@ class Agent:
 
         self.n_step_returns = conf.multi_step_n
         self.discount_factor = conf.discount_factor
-
+        self.use_rnd = conf.use_rnd
         self.use_noisy = conf.use_noisy
         self.epsilon = conf.epsilon_start
 
@@ -60,6 +61,12 @@ class Agent:
         self.num_envs_indexes = [i for i in range(self.num_envs)]
         self.use_kl_loss = conf.use_kl_loss
         self.grad_clip = conf.grad_clip
+        if self.use_rnd:
+            self.reward_model = RND(conf,
+                                    action_space,
+                                    nn.Linear,
+                                    self.in_channels
+                                    )
 
         if self.use_per:
             self.replay_buffer = PrioritizedBuffer(self.replay_buffer_size,
@@ -136,6 +143,9 @@ class Agent:
 
         self.model.generate_noise()
         self.target_model.generate_noise()
+
+        if self.use_rnd:
+            self.reward_model.train(n_next_states)
 
         loss, priorities = self.get_loss(self, states, actions, rewards, n_next_states, dones)
 

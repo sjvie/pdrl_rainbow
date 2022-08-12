@@ -11,6 +11,8 @@ class Config(config.Config):
     use_dueling = True
     use_double = True
     use_kl_loss = True
+    use_rnd = True
+    use_exploration = False
 
     model_arch = "impala"
     model_pre_scale_factor = 2
@@ -30,7 +32,6 @@ class Config(config.Config):
     # adam_learning_rate = 0.0000625
     # adam_e = 1.5e-4
 
-    use_exploration = True
     exp_beta_start = 0.001
     exp_beta_end = 100
     exp_beta_mid = 1

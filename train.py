@@ -183,7 +183,7 @@ def train_agent(agent, env, conf):
                 episode_log["episode_finished"] = episode
                 episode_log["episode_reward"] = episode_rewards[idx].item()
                 episode_log["episode_clipped_reward"] = episode_clipped_rewards[idx].item()
-                if conf.use_exploration:
+                if conf.use_exploration or conf.use_rnd:
                     episode_log["episode_modified_reward"] = episode_modified_rewards[idx].item()
                 episode_log["episode_length"] = episode_lengths[idx].item()
 

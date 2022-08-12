@@ -29,7 +29,7 @@ class Config(config.Config):
     terminal_on_life_loss = False
 
     batch_size = 32
-    num_envs = 3
+    num_envs = 4
     sample_repetitions = 8
 
     save_video_per_frames = 2500
@@ -52,11 +52,12 @@ class Config(config.Config):
     use_per = True
     multi_step_n = 3
     use_noisy = True
-    use_distributional = False
+    use_distributional = True
     use_dueling = True
     use_double = True
     use_kl_loss = True
-    use_exploration = True
+    use_exploration = False
+    use_rnd = True
     replay_buffer_alpha = 0.2
 
     replay_buffer_beta_start = 0.4

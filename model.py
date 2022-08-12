@@ -95,7 +95,7 @@ class RewardBody(nn.Module):
                 nn.ReLU(),
                 linear_layer(in_features=512, out_features=self.action_space * self.num_atoms, device=device)
             )
-    def forward(self,x):
+    def forward(self,x,log=False):
         if self.no_grad:
             with torch.no_grad:
                 q_dist = self.final_layers(x)

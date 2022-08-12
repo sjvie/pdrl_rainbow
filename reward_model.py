@@ -19,6 +19,7 @@ class RND:
                                           eps=config.adam_e)
         self.reward_rms = RunningMeanStd()
         self.obs_rms = RunningMeanStd(shape=(1,1,84,84))
+        self.device = config.device
 
     def train(self,next_obs):
         next_obs = next_obs.cpu().numpy()
@@ -31,6 +32,8 @@ class RND:
 
     # estimate intrinsic reward by using the mse between target and predictor values
     def estimate(self, next_obs):
+
+        next_obs = torch.as_tensor(next_obs,dtype=torch.float32).to(self.device)
         target_val = self.reward_target(next_obs)
         pred_val = self.reward_predicator(next_obs)
         r_i = nn.functional.mse_loss(target_val.detach(),pred_val,reduction='none').mean(dim=-1)
@@ -38,12 +41,14 @@ class RND:
 
     # calculate normalized intrinsic reward
     def calc_int(self,next_obs):
+
         obs = self.norm_obs(next_obs)
         ints = self.estimate(obs)
         mean, std, count = self.calc_mean_std_count(ints)
         self.reward_rms.update_from_moments(mean,std**2,count)
         ints = ints / np.sqrt(self.reward_rms.var)
         return ints
+
     def update_obs(self,next_obs):
         self.obs_rms.update(next_obs)
 

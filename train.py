@@ -37,6 +37,7 @@ def train_agent(agent, env, conf):
 
     # for logging
     loss_list = np.zeros((conf.loss_avg, conf.batch_size), dtype=np.float32)
+    rnd_loss_list = np.zeros((conf.loss_avg, conf.batch_size), dtype=np.float32)
     weight_list = np.zeros((conf.loss_avg, conf.batch_size), dtype=np.float32)
 
     get_epsilon = util.LinearValue(conf.epsilon_start, conf.epsilon_end, 0, conf.epsilon_annealing_steps)
@@ -90,7 +91,11 @@ def train_agent(agent, env, conf):
         # train the agent
         if total_frames > conf.start_learning_after and steps % train_per_steps == 0:
             for _ in range(train_reps_per_step):
-                loss, weights = agent.train()
+                if conf.use_rnd:
+                    loss, weights, rnd_loss = agent.train()
+                    rnd_loss = rnd_loss.cpu().detach().numpy()
+                else:
+                    loss, weights, _ = agent.train()
                 loss = loss.cpu().detach().numpy()
                 if conf.use_per:
                     weights = weights.cpu().detach().numpy()
@@ -99,6 +104,10 @@ def train_agent(agent, env, conf):
                     frame_log["frame_loss_avg"] = loss_list.mean()
                     frame_log["frame_loss_min"] = loss_list.min()
                     frame_log["frame_loss_max"] = loss_list.max()
+                    if conf.use_rnd:
+                        frame_log["frame_rnd_loss_avg"] = rnd_loss_list.mean()
+                        frame_log["frame_rnd_loss_min"] = rnd_loss_list.min()
+                        frame_log["frame_rnd_loss_max"] = rnd_loss_list.max()
                     if conf.use_per:
                         frame_log["buffer_tree_sum"] = agent.replay_buffer.tree.sum()
                         frame_log["buffer_tree_min"] = agent.replay_buffer.tree.min()
@@ -110,6 +119,8 @@ def train_agent(agent, env, conf):
 
                 # save for logging
                 loss_list[train_steps % conf.loss_avg] = loss
+                if conf.use_rnd:
+                    rnd_loss_list[train_steps % conf.loss_avg] = rnd_loss
                 if conf.use_per:
                     weight_list[train_steps % conf.loss_avg] = weights
 

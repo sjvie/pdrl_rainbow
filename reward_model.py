@@ -25,10 +25,12 @@ class RND:
         next_obs = next_obs.cpu().numpy()
         next_obs = self.norm_obs(next_obs)
         loss = self.estimate(next_obs)
+        loss_copy = loss.clone()
+        loss = loss.mean()
         self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()
-        return loss
+        return loss_copy
 
     # estimate intrinsic reward by using the mse between target and predictor values
     def estimate(self, next_obs):
@@ -44,6 +46,7 @@ class RND:
 
         obs = self.norm_obs(next_obs)
         ints = self.estimate(obs)
+        ints = ints.cpu().detach().numpy()
         mean, std, count = self.calc_mean_std_count(ints)
         self.reward_rms.update_from_moments(mean,std**2,count)
         ints = ints / np.sqrt(self.reward_rms.var)
@@ -67,8 +70,8 @@ class RunningMeanStd(object):
     # shape of (1,1,84,84) ensures that we can calc mean & var over first dimension and still add the "full"
     # observations to count
     def __init__(self, epsilon=1e-4, shape=()):
-        self.mean = np.zeros(shape, 'float64')
-        self.var = np.ones(shape, 'float64')
+        self.mean = np.zeros(shape, 'float32')
+        self.var = np.ones(shape, 'float32')
         self.count = epsilon
 
     def update(self, x):

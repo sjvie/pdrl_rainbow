@@ -2,15 +2,18 @@ import configs.config as config
 
 
 class Config(config.Config):
-    name = "Seaquest Impala no dist new_env exp 10M"
+    name = "Venture RND Impala dist new_env exp 10M"
 
     use_per = True
     multi_step_n = 3
     use_noisy = True
-    use_distributional = False
+    use_distributional = True
     use_dueling = True
     use_double = True
     use_kl_loss = True
+    use_rnd = True
+    #use_exploration = True
+
 
     model_arch = "impala"
     model_pre_scale_factor = 2
@@ -30,7 +33,6 @@ class Config(config.Config):
     # adam_learning_rate = 0.0000625
     # adam_e = 1.5e-4
 
-    use_exploration = True
     exp_beta_start = 0.001
     exp_beta_end = 100
     exp_beta_mid = 1
@@ -41,4 +43,4 @@ class Config(config.Config):
 
     num_frames = 10_000_000
 
-    env_name = "ALE/Seaquest-v5"
+    env_name = "ALE/Venture-v5"

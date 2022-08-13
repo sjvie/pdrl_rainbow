@@ -2,11 +2,11 @@ import configs.config as config
 
 
 class Config(config.Config):
-    name = "Asterix Impala no dist new_env exp 10M"
+    name = "Montezuma Impala no dist new_env exp 10M"
 
     use_per = True
     multi_step_n = 3
-    use_noisy = False
+    use_noisy = True
     use_distributional = True
     use_dueling = True
     use_double = True
@@ -34,4 +34,4 @@ class Config(config.Config):
 
     num_frames = 10_000_000
 
-    env_name = "ALE/Asterix-v5"
+    env_name = "ALE/MontezumaRevenge-v5"

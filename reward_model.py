@@ -22,10 +22,11 @@ class RND:
         self.device = config.device
 
     def train(self,next_obs):
-        next_obs = next_obs.cpu().numpy()
+        #next_obs = next_obs.cpu().numpy()
         next_obs = self.norm_obs(next_obs)
         loss = self.estimate(next_obs)
         loss_copy = loss.clone()
+        loss_copy = loss_copy.cpu().detach().numpy()
         loss = loss.mean()
         self.optimizer.zero_grad()
         loss.backward()

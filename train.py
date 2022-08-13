@@ -92,10 +92,9 @@ def train_agent(agent, env, conf):
         if total_frames > conf.start_learning_after and steps % train_per_steps == 0:
             for _ in range(train_reps_per_step):
                 if conf.use_rnd:
-                    loss, weights, rnd_loss = agent.train()
-                    rnd_loss = rnd_loss.cpu().detach().numpy()
+                    loss, weights= agent.train()
                 else:
-                    loss, weights, _ = agent.train()
+                    loss, weights = agent.train()
                 loss = loss.cpu().detach().numpy()
                 if conf.use_per:
                     weights = weights.cpu().detach().numpy()
@@ -119,8 +118,7 @@ def train_agent(agent, env, conf):
 
                 # save for logging
                 loss_list[train_steps % conf.loss_avg] = loss
-                if conf.use_rnd:
-                    rnd_loss_list[train_steps % conf.loss_avg] = rnd_loss
+
                 if conf.use_per:
                     weight_list[train_steps % conf.loss_avg] = weights
 
@@ -140,6 +138,10 @@ def train_agent(agent, env, conf):
         # get the next states, rewards and dones from the envs
         next_states, rewards, dones, infos = env.step_wait()
         next_states = np.array(next_states).squeeze()
+        if conf.use_rnd:
+            rnd_loss = agent.reward_model.train(next_states)
+            for i in range(len(rnd_loss)):
+                rnd_loss_list[(episode-num_envs+i) % conf.loss_avg] = rnd_loss[i]
 
         # end episode after life loss when the env does not reset on life loss
         # as everyone else probably uses the score of the full game -> don't do this

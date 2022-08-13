@@ -2,7 +2,7 @@ import configs.config as config
 
 
 class Config(config.Config):
-    name = "Seaquest Impala dist new_env 10M"
+    name = "Venture Impala dist new_env 10M"
 
     use_per = True
     multi_step_n = 3
@@ -34,4 +34,4 @@ class Config(config.Config):
 
     num_frames = 10_000_000
 
-    env_name = "ALE/Seaquest-v5"
+    env_name = "ALE/Venture-v5"

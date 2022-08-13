@@ -144,9 +144,6 @@ class Agent:
         self.model.generate_noise()
         self.target_model.generate_noise()
 
-        if self.use_rnd:
-            reward_loss = self.reward_model.train(n_next_states)
-
         loss, priorities = self.get_loss(self, states, actions, rewards, n_next_states, dones)
 
         loss = loss.squeeze()
@@ -167,7 +164,7 @@ class Agent:
         torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.grad_clip)
         self.optimizer.step()
 
-        return loss_copy, weights, reward_loss
+        return loss_copy, weights
 
     def select_action(self, np_states, action_prob):
         """

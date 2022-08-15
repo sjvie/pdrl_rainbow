@@ -100,7 +100,7 @@ class Config:
     exp_beta_end = 100
     exp_beta_mid = 1
     exp_beta_annealing_steps = 1_000_000
-    exp_beta_annealing_steps2 = 3_000_000
+    exp_beta_annealing_steps2 = 2_000_000
 
     clip_reward = True
 

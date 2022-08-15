@@ -2,19 +2,19 @@ import configs.config as config
 
 
 class Config(config.Config):
-    name = "Freeway RND Impala dist new_env exp 10M"
+    name = "Frostbite rainbow softmax noisy 10M"
 
     use_per = True
     multi_step_n = 3
     use_noisy = True
-    use_distributional = True
+    use_distributional = False
     use_dueling = True
     use_double = True
     use_kl_loss = True
-    use_rnd = True
-    #use_exploration = True
+    #use_rnd = True
+    use_exploration = True
 
-    model_arch = "impala"
+    model_arch = "rainbow"
     model_pre_scale_factor = 2
     model_body_scale_factor = 1
     impala_adaptive_pool_size = 8
@@ -42,4 +42,4 @@ class Config(config.Config):
 
     num_frames = 10_000_000
 
-    env_name = "ALE/Freeway-v5"
+    env_name = "ALE/Frostbite-v5"

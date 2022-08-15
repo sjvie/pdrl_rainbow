@@ -2,7 +2,7 @@ import configs.config as config
 
 
 class Config(config.Config):
-    name = "BeamRider RND Impala dist new_env exp 10M"
+    name = "Frostbite rainbow RND noisy 10M"
 
     use_per = True
     multi_step_n = 3
@@ -14,7 +14,7 @@ class Config(config.Config):
     use_rnd = True
     #use_exploration = True
 
-    model_arch = "impala"
+    model_arch = "rainbow"
     model_pre_scale_factor = 2
     model_body_scale_factor = 1
     impala_adaptive_pool_size = 8
@@ -42,4 +42,4 @@ class Config(config.Config):
 
     num_frames = 10_000_000
 
-    env_name = "ALE/BeamRider-v5"
+    env_name = "ALE/Frostbite-v5"

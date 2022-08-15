@@ -2,17 +2,17 @@ import configs.config as config
 
 
 class Config(config.Config):
-    name = "Montezuma Impala no dist new_env exp 10M"
+    name = "Montezuma rainbow epsilon 10M"
 
     use_per = True
     multi_step_n = 3
-    use_noisy = True
+    use_noisy = False
     use_distributional = True
     use_dueling = True
     use_double = True
     use_kl_loss = True
 
-    model_arch = "impala"
+    model_arch = "rainbow"
     model_pre_scale_factor = 2
     model_body_scale_factor = 1
     impala_adaptive_pool_size = 8

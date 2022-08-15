@@ -27,7 +27,6 @@ class Config(config.Config):
     max_noops = 0
     repeat_action_probability = 0.25
     terminal_on_life_loss = False
-
     batch_size = 32
     num_envs = 4
     sample_repetitions = 8
@@ -51,7 +50,7 @@ class Config(config.Config):
 
     use_per = True
     multi_step_n = 3
-    use_noisy = True
+    use_noisy = False
     use_distributional = True
     use_dueling = True
     use_double = True
@@ -64,7 +63,7 @@ class Config(config.Config):
     replay_buffer_beta_end = 1.0
     replay_buffer_beta_annealing_steps = 60000
 
-    epsilon_start = 1
+    epsilon_start = 0.1
     epsilon_end = 0.01
     epsilon_annealing_steps = 2000
 

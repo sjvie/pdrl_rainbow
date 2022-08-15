@@ -2,20 +2,18 @@ import configs.config as config
 
 
 class Config(config.Config):
-    name = "Venture RND Impala dist new_env exp 10M"
+    name = "SpaceInvaders RND eps new_env 10M"
 
     use_per = True
     multi_step_n = 3
-    use_noisy = True
+    use_noisy = False
     use_distributional = True
     use_dueling = True
     use_double = True
     use_kl_loss = True
     use_rnd = True
-    #use_exploration = True
 
-
-    model_arch = "impala"
+    model_arch = "rainbow"
     model_pre_scale_factor = 2
     model_body_scale_factor = 1
     impala_adaptive_pool_size = 8
@@ -33,14 +31,8 @@ class Config(config.Config):
     # adam_learning_rate = 0.0000625
     # adam_e = 1.5e-4
 
-    exp_beta_start = 0.001
-    exp_beta_end = 100
-    exp_beta_mid = 1
-    exp_beta_annealing_steps = 1000000
-    exp_beta_annealing_steps2 = 3000000
-
     loss_avg = 50
 
     num_frames = 10_000_000
 
-    env_name = "ALE/Venture-v5"
+    env_name = "ALE/SpaceInvaders-v5"

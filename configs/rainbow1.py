@@ -2,11 +2,11 @@ import configs.config as config
 
 
 class Config(config.Config):
-    name = "Montezuma rainbow epsilon 10M"
+    name = "Montezuma rainbow noisy 10M"
 
     use_per = True
     multi_step_n = 3
-    use_noisy = False
+    use_noisy = True
     use_distributional = True
     use_dueling = True
     use_double = True
@@ -25,10 +25,10 @@ class Config(config.Config):
     repeat_action_probability = 0.25
     terminal_on_life_loss = False
 
-    adam_learning_rate = 0.00025
-    adam_e = 0.0000195
-    # adam_learning_rate = 0.0000625
-    # adam_e = 1.5e-4
+    #adam_learning_rate = 0.00025
+    #adam_e = 0.0000195
+    adam_learning_rate = 0.0000625
+    adam_e = 1.5e-4
 
     loss_avg = 50
 

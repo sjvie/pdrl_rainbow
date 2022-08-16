@@ -26,10 +26,10 @@ class Config(config.Config):
     repeat_action_probability = 0.25
     terminal_on_life_loss = False
 
-    adam_learning_rate = 0.00025
-    adam_e = 0.0000195
-    # adam_learning_rate = 0.0000625
-    # adam_e = 1.5e-4
+    #adam_learning_rate = 0.00025
+    #adam_e = 0.0000195
+    adam_learning_rate = 0.0000625
+    adam_e = 1.5e-4
 
     loss_avg = 50
 

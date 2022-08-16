@@ -2,7 +2,7 @@ import configs.config as config
 
 
 class Config(config.Config):
-    name = "Montezuma rainbow epsilon rnd 10M"
+    name = "Montezuma rainbow epsilon 10M"
 
     use_per = True
     multi_step_n = 3
@@ -11,7 +11,7 @@ class Config(config.Config):
     use_dueling = True
     use_double = True
     use_kl_loss = True
-    use_rnd = True
+    #use_rnd = True
 
     model_arch = "rainbow"
     model_pre_scale_factor = 2
@@ -26,10 +26,10 @@ class Config(config.Config):
     repeat_action_probability = 0.25
     terminal_on_life_loss = False
 
-    adam_learning_rate = 0.00025
-    adam_e = 0.0000195
-    # adam_learning_rate = 0.0000625
-    # adam_e = 1.5e-4
+    #adam_learning_rate = 0.00025
+    #adam_e = 0.0000195
+    adam_learning_rate = 0.0000625
+    adam_e = 1.5e-4
 
     loss_avg = 50
 

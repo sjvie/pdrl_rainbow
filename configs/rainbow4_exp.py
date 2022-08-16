@@ -2,7 +2,7 @@ import configs.config as config
 
 
 class Config(config.Config):
-    name = "SpaceInvaders RND eps new_env 10M"
+    name = "Frostbite rainbow RND epsilon 10M"
 
     use_per = True
     multi_step_n = 3
@@ -12,6 +12,7 @@ class Config(config.Config):
     use_double = True
     use_kl_loss = True
     use_rnd = True
+    #use_exploration = True
 
     model_arch = "rainbow"
     model_pre_scale_factor = 2
@@ -26,13 +27,19 @@ class Config(config.Config):
     repeat_action_probability = 0.25
     terminal_on_life_loss = False
 
-    adam_learning_rate = 0.00025
-    adam_e = 0.0000195
-    # adam_learning_rate = 0.0000625
-    # adam_e = 1.5e-4
+    #adam_learning_rate = 0.00025
+    #adam_e = 0.0000195
+    adam_learning_rate = 0.0000625
+    adam_e = 1.5e-4
+
+    exp_beta_start = 0.001
+    exp_beta_end = 100
+    exp_beta_mid = 1
+    exp_beta_annealing_steps = 1000000
+    exp_beta_annealing_steps2 = 3000000
 
     loss_avg = 50
 
     num_frames = 10_000_000
 
-    env_name = "ALE/SpaceInvaders-v5"
+    env_name = "ALE/Frostbite-v5"

@@ -2,11 +2,11 @@ import configs.config as config
 
 
 class Config(config.Config):
-    name = "Montezuma rainbow rnd noisy 10M"
+    name = "SpaceInvaders RND eps 10M"
 
     use_per = True
     multi_step_n = 3
-    use_noisy = True
+    use_noisy = False
     use_distributional = True
     use_dueling = True
     use_double = True
@@ -35,4 +35,4 @@ class Config(config.Config):
 
     num_frames = 10_000_000
 
-    env_name = "ALE/MontezumaRevenge-v5"
+    env_name = "ALE/SpaceInvaders-v5"

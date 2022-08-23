@@ -82,14 +82,15 @@ class Config:
     use_double = True
 
     # whether to end the episode and reset after a life was lost
-    terminal_on_life_loss = True
+    terminal_on_life_loss = False
 
     # whether to use KL loss (as opposed to cross entropy loss)
-    use_kl_loss = False
+    use_kl_loss = True
 
     # whether to use the softmax exploration
     use_exploration = False
     use_rnd = False
+    
     # if noisy is false, you must consider epsilon greedy as exploration strategy (for now)
     epsilon_start = 1
     epsilon_end = 0.01
@@ -133,10 +134,10 @@ class Config:
 
     # the maximum amount of no-ops inserted at the beginning of each episode
     # paper: up to 30
-    max_noops = 30
+    max_noops = 0
 
     # probability that instead of the selected action, the environment instead uses the last action
-    repeat_action_probability = 0.0
+    repeat_action_probability = 0.25
 
     # paper: Min history to start learning: 80K frames
     start_learning_after = 80_000

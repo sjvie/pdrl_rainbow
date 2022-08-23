@@ -1,26 +1,11 @@
-# pdrl_rainbow
+# Improving Rainbow: Improving Improvements in Deep Reinforcement Learning
 
-Struktur:
-1. Netzwerk bauen (Duelling Struktur)
-2. -> ersetzen durch Noisy Net (die Liniearen Layer)
-3. Erstellen Experience Replay Buffer /Rauslöschen von alten/unwichtigen daten nicht vergessen
-4. Bild Skalieren & preprocessen
-5. Agenten erstellen wir model & target_model (+ Hyperparameter):
-6. For Loop:
-- Sieht die Umwelt: input Bild (state)
-- Action: Q Value vom NN bestimmen lassen und mit argmax auswählen
-- Action in Step Funktion
--> Reward + next_state
-- Dinge abspeicher (für Experience Replay)
-- state = next_state
-Learnstep: 
-- Batch vom Experience Replay erstellen
-- predicten von future rewards (Multistep beachten)
-- Erwartete Q Values berechnen (Multistep beachten)
-- Lossfunktion mit Distributional RL (Gradient Descent)
-- Backpropagation (Fit)
-- Nach Update Period Target network updaten
+This is an implementation of the Rainbow reinforcement learning agent presented by Hessel et al.
+The implementation uses parallel asynchronous environments and has some extensions to the original Rainbow agent:
+- Different neural network architectures, namely the original DQN architecture, the Impala CNN, and D2RL
+- Different exploration strategies, namely epsilon-greedy, noisy nets, softmax exploration, and random network distillation
 
-Später:
-Monitoring Zeug:
-KLD, Action Distribution, Reward tracken, Loss mit tracken
+To train the agent with the original Rainbow settings:
+```
+python main.py env-name="ALE/Breakout-v5" log-wandb=False
+```

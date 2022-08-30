@@ -10,6 +10,7 @@ The implementation uses parallel asynchronous environments and has some extensio
 ## Running the Agent
 
 To train the agent with the original Rainbow settings:
+(note that this requires a LOT of RAM. At least around 50 GB)
 ```
 python main.py env-name="ALE/Breakout-v5" log-wandb=False
 ```

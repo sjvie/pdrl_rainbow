@@ -15,5 +15,10 @@ To train the agent with the original Rainbow settings:
 python main.py --log_wandb=False
 ```
 
+## Results
+
+Some of the best episodes of the five games played by setup 3 can be watched on Youtube: \
+https://youtube.com/playlist?list=PLdeppp6CMwaRKorJJUJzSIcHffu37su-r
+
 
 _This was created as part of the Project Deep Reinforcement Learning at Ulm University_

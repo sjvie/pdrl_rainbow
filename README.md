@@ -16,5 +16,4 @@ python main.py --log_wandb=False
 ```
 
 
-
 _This was created as part of the Project Deep Reinforcement Learning at Ulm University_
